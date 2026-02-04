@@ -23,9 +23,10 @@ const statusLabel = (inv: { status: string; isFinal: boolean }) => {
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams?: { status?: string };
+  searchParams?: { status?: string } | Promise<{ status?: string }>;
 }) {
-  const statusFilter = searchParams?.status ?? "all";
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const statusFilter = resolvedSearchParams?.status ?? "all";
 
   const where: any = { docType: "INVOICE" };
   if (statusFilter === "paid") where.status = "PAID";
