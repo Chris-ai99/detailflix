@@ -20,7 +20,9 @@ export default async function CustomerDetailPage({
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{customer.name}</h1>
+        <h1 className="text-2xl font-bold">
+          {customer.name || (customer.isBusiness ? "Gewerbekunde" : "Ohne Name")}
+        </h1>
 
         <div className="flex gap-2">
           <Link

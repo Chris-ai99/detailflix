@@ -17,6 +17,12 @@ export async function getVehicle(id: string | undefined) {
 }
 
 export async function updateVehicle(id: string, formData: FormData) {
+  const current = await prisma.vehicle.findUnique({
+    where: { id },
+    select: { isStock: true, isForSale: true, isSold: true, soldAt: true },
+  });
+  if (!current) throw new Error("Fahrzeug nicht gefunden");
+
   const vin = String(formData.get("vin") ?? "").trim() || null;
   const make = String(formData.get("make") ?? "").trim() || null;
   const model = String(formData.get("model") ?? "").trim() || null;
@@ -31,6 +37,29 @@ export async function updateVehicle(id: string, formData: FormData) {
   const purchaseEuroRaw = String(formData.get("purchaseEuro") ?? "").trim();
   const purchaseCents =
     purchaseEuroRaw ? Math.round(Number(purchaseEuroRaw.replace(",", ".")) * 100) : null;
+  const hasStock = formData.has("isStock");
+  const hasForSale = formData.has("isForSale");
+  const hasSold = formData.has("isSold");
+
+  let isStock = current.isStock;
+  let isForSale = current.isForSale;
+  let isSold = current.isSold;
+  let soldAt: Date | null = current.soldAt ?? null;
+
+  if (hasStock) isStock = Boolean(formData.get("isStock"));
+  if (hasForSale) isForSale = Boolean(formData.get("isForSale"));
+  if (hasSold) isSold = Boolean(formData.get("isSold"));
+
+  if (hasForSale && isForSale) {
+    isStock = true;
+  }
+  if (hasSold) {
+    soldAt = isSold ? new Date() : null;
+    if (isSold) {
+      isForSale = false;
+      isStock = true;
+    }
+  }
 
   await prisma.vehicle.update({
     where: { id },
@@ -42,6 +71,11 @@ export async function updateVehicle(id: string, formData: FormData) {
       year: year && Number.isFinite(year) ? year : null,
       mileage: mileage && Number.isFinite(mileage) ? mileage : null,
       purchaseCents: Number.isFinite(purchaseCents as any) ? purchaseCents : null,
+      isStock,
+      isForSale: isSold ? false : isForSale,
+      isSold,
+      soldAt,
+      customerId: hasStock && isStock ? null : undefined,
     },
   });
 

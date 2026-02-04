@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import DeleteCustomerButton from "./ui/DeleteCustomerButton";
 
 export default async function CustomersPage() {
   const customers = await prisma.customer.findMany({
@@ -26,6 +27,7 @@ export default async function CustomersPage() {
               <th className="py-2">Name</th>
               <th>E-Mail</th>
               <th>Telefon</th>
+              <th className="text-right">Aktion</th>
             </tr>
           </thead>
           <tbody>
@@ -36,11 +38,22 @@ export default async function CustomersPage() {
                     className="text-emerald-400 hover:underline"
                     href={`/customers/${c.id}`}
                   >
-                    {c.name}
+                    {c.name || (c.isBusiness ? "Gewerbekunde" : "Ohne Name")}
                   </Link>
                 </td>
                 <td>{c.email ?? "-"}</td>
                 <td>{c.phone ?? "-"}</td>
+                <td className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Link
+                      className="rounded px-3 py-1 text-xs hover:bg-slate-800"
+                      href={`/customers/${c.id}/edit`}
+                    >
+                      Bearbeiten
+                    </Link>
+                    <DeleteCustomerButton id={c.id} />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

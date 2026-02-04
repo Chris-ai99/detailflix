@@ -22,6 +22,17 @@ export default function NewVehiclePage() {
           <Field label="Einkaufspreis (€)" name="purchaseEuro" />
         </div>
 
+        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-300">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="isStock" className="h-4 w-4" />
+            Fahrzeug ist Bestand (Handel)
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="isForSale" className="h-4 w-4" />
+            Zum Verkauf anbieten
+          </label>
+        </div>
+
         <div>
           <label className="mb-1 block text-sm text-slate-300">Notizen</label>
           <textarea

@@ -5,9 +5,15 @@ import { redirect } from "next/navigation";
 
 export async function updateCustomer(formData: FormData) {
   const id = String(formData.get("id") || "");
+  const isBusiness = Boolean(formData.get("isBusiness"));
+  const nameRaw = String(formData.get("name") || "").trim();
+  if (!nameRaw && !isBusiness) {
+    throw new Error("Name ist Pflicht");
+  }
 
   const data = {
-    name: String(formData.get("name") || ""),
+    name: nameRaw || null,
+    isBusiness,
     email: String(formData.get("email") || "") || null,
     phone: String(formData.get("phone") || "") || null,
     vatId: String(formData.get("vatId") || "") || null,

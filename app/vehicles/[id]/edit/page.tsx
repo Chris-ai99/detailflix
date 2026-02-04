@@ -5,16 +5,17 @@ import { getVehicle, updateVehicle } from "../serverActions";
 export default async function EditVehiclePage({
   params,
 }: {
-  params: { id: string };
+  params: { id: string } | Promise<{ id: string }>;
 }) {
-  const v = await getVehicle(params.id);
+  const { id } = await params;
+  const v = await getVehicle(id);
 
   const purchaseEuro =
     v.purchaseCents != null ? (v.purchaseCents / 100).toFixed(2).replace(".", ",") : "";
 
   async function action(formData: FormData) {
     "use server";
-    await updateVehicle(params.id, formData);
+    await updateVehicle(id, formData);
   }
 
   return (

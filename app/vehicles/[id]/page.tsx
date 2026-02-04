@@ -1,17 +1,23 @@
 // app/vehicles/[id]/page.tsx
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { getVehicle } from "./serverActions";
+import DeleteVehicleButton from "../ui/DeleteVehicleButton";
 
 export default async function VehicleDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>; // ✅ Next 15: params ist Promise
 }) {
-  const v = await getVehicle(params.id);
-  // ...
+  const { id } = await params;      // ✅ unwrap
+  const v = await getVehicle(id);
+
+  if (!v) return notFound();        // ✅ verhindert Crash + zeigt echte 404-Seite
 
   const purchaseEuro =
-    v.purchaseCents != null ? (v.purchaseCents / 100).toFixed(2).replace(".", ",") : "—";
+    v.purchaseCents != null
+      ? (v.purchaseCents / 100).toFixed(2).replace(".", ",")
+      : "—";
 
   return (
     <div className="space-y-6">
@@ -29,6 +35,7 @@ export default async function VehicleDetailPage({
           >
             Bearbeiten
           </Link>
+          <DeleteVehicleButton id={v.id} redirectTo="/vehicles" />
         </div>
       </div>
 
@@ -37,7 +44,10 @@ export default async function VehicleDetailPage({
           <Item label="VIN" value={v.vin ?? "—"} />
           <Item label="Baujahr" value={v.year?.toString() ?? "—"} />
           <Item label="Kilometer" value={v.mileage?.toString() ?? "—"} />
-          <Item label="Einkaufspreis" value={purchaseEuro === "—" ? "—" : `${purchaseEuro} €`} />
+          <Item
+            label="Einkaufspreis"
+            value={purchaseEuro === "—" ? "—" : `${purchaseEuro} €`}
+          />
         </dl>
 
         {v.notes && (

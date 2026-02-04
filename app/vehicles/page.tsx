@@ -1,6 +1,7 @@
 // app/vehicles/page.tsx
 import Link from "next/link";
 import { listVehicles } from "./serverActions";
+import DeleteVehicleButton from "./ui/DeleteVehicleButton";
 
 export default async function VehiclesPage() {
   const vehicles = await listVehicles();
@@ -8,7 +9,7 @@ export default async function VehiclesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Fahrzeuge</h1>
+        <h1 className="text-2xl font-semibold">Fahrzeuge Kunden</h1>
         <Link
           href="/vehicles/new"
           className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-700"
@@ -42,12 +43,15 @@ export default async function VehiclesPage() {
                 <td className="p-3">{v.mileage ?? "—"}</td>
                 <td className="p-3">{v.year ?? "—"}</td>
                 <td className="p-3 text-right">
-                  <Link
-                    className="rounded px-3 py-1 hover:bg-slate-800"
-                    href={`/vehicles/${v.id}/edit`}
-                  >
-                    Bearbeiten
-                  </Link>
+                  <div className="flex items-center justify-end gap-2">
+                    <Link
+                      className="rounded px-3 py-1 hover:bg-slate-800"
+                      href={`/vehicles/${v.id}/edit`}
+                    >
+                      Bearbeiten
+                    </Link>
+                    <DeleteVehicleButton id={v.id} />
+                  </div>
                 </td>
               </tr>
             ))}
@@ -65,3 +69,4 @@ export default async function VehiclesPage() {
     </div>
   );
 }
+

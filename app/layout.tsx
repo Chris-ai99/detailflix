@@ -25,7 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <NavLink href="/services" label="Leistungen" />
               <NavLink href="/offers" label="Angebote" />
               <NavLink href="/invoices" label="Rechnungen" />
-              <NavLink href="/vehicles" label="Fahrzeuge" />
+              <NavLink href="/vehicles" label="Fahrzeuge Kunden" />
+              <NavLink href="/vehicles/for-sale" label="Fahrzeuge Verkauf" />
+              <NavLink href="/vehicles/archive" label="Fahrzeuge Archiv" />
             </nav>
           </aside>
 
@@ -35,4 +37,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-``

@@ -24,6 +24,9 @@ export async function createVehicle(formData: FormData) {
   const purchaseEuroRaw = String(formData.get("purchaseEuro") ?? "").trim();
   const purchaseCents =
     purchaseEuroRaw ? Math.round(Number(purchaseEuroRaw.replace(",", ".")) * 100) : null;
+  const isStockRaw = Boolean(formData.get("isStock"));
+  const isForSale = Boolean(formData.get("isForSale"));
+  const isStock = isForSale ? true : isStockRaw;
 
   const created = await prisma.vehicle.create({
     data: {
@@ -34,6 +37,10 @@ export async function createVehicle(formData: FormData) {
       year,
       mileage,
       purchaseCents: Number.isFinite(purchaseCents as any) ? purchaseCents : null,
+      isStock,
+      isForSale,
+      isSold: false,
+      customerId: isStock ? null : null,
     },
   });
 

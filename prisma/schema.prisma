@@ -6,6 +6,170 @@ datasource db {
   provider = "sqlite"
 }
 
+model Customer {
+  id     String  @id @default(cuid())
+  name   String?
+  isBusiness Boolean @default(false)
+  email  String?
+  phone  String?
+  vatId  String?
+  street String?
+  zip    String?
+  city   String?
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents Document[]
+  vehicles  Vehicle[]
+}
+
+model ServiceItem {
+  id String @id @default(cuid())
+
+  name     String
+  category String?
+  unit     String  @default("Stk") // ✅ String braucht ""
+
+  pricingType ServicePricingType @default(AW) // ✅ Enum ohne ""
+
+  awDurationMinutes Int?
+  awUnitPriceCents  Int?
+  awDefaultQty      Float? @default(1.0)
+
+  hourlyRateCents Int?
+  defaultMinutes  Int?
+
+  materialPercent    Int? @default(0)
+  materialFixedCents Int? @default(0)
+
+  vatRate Int     @default(19)
+  active  Boolean @default(true)
+
+  descriptionHtml String?
+  shortText       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vehicle {
+  id String @id @default(cuid())
+
+  vin           String?
+  make          String?
+  model         String?
+  year          Int?
+  mileage       Int?
+  purchaseCents Int?
+  notes         String?
+  isStock       Boolean @default(false)
+  isForSale     Boolean @default(false)
+  isSold        Boolean @default(false)
+  soldAt        DateTime?
+  customerId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents Document[]
+  customer  Customer? @relation(fields: [customerId], references: [id])
+}
+
+model DocumentDraftCounter {
+  id String @id @default(cuid())
+
+  docType DocumentType
+  year    Int
+  lastSeq Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([docType, year])
+}
+
+model Document {
+  id String @id @default(cuid())
+
+  docType   DocumentType
+  docNumber String
+  draftNumber String?
+  status    DocumentStatus @default(DRAFT) // ✅ Enum ohne ""
+  isFinal   Boolean        @default(false)
+
+  issueDate  DateTime  @default(now())
+  dueDate    DateTime?
+  validUntil DateTime?
+  paidAt     DateTime?
+  cancelledAt DateTime?
+
+  taxMode       TaxMode @default(REGULAR_VAT) // ✅ Enum ohne ""
+  depositCents  Int?
+  notesPublic   String?
+  notesInternal String?
+
+  customerId String?
+  vehicleId  String?
+  creditForId String?
+
+  netTotalCents   Int @default(0)
+  vatTotalCents   Int @default(0)
+  grossTotalCents Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicle  Vehicle?  @relation(fields: [vehicleId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+  creditFor Document? @relation("CreditFor", fields: [creditForId], references: [id])
+  creditNotes Document[] @relation("CreditFor")
+
+  lines DocumentLine[]
+}
+
+model DocumentLine {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id])
+
+  // stabile Reihenfolge im PDF / UI
+  position Int @default(1)
+
+  // Snapshot Felder
+  title        String
+  qty          Float  @default(1)
+  unitNetCents Int    @default(0)
+  vatRate      Int    @default(19)
+
+  // ✅ NEU (für Step 3 wie dein Screenshot)
+  description String?
+  discountPct Float   @default(0)
+
+  // berechnete Werte (für PDF/Speed/Consistency)
+  lineNetCents   Int @default(0)
+  lineVatCents   Int @default(0)
+  lineGrossCents Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([documentId])
+  @@index([documentId, position])
+}
+
+model DocumentCounter {
+  id String @id @default(cuid())
+
+  docType DocumentType
+  year    Int
+  lastSeq Int          @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([docType, year])
+}
+
 enum ServicePricingType {
   AW
   HOURLY
@@ -15,6 +179,7 @@ enum DocumentType {
   OFFER
   INVOICE
   PURCHASE_CONTRACT
+  CREDIT_NOTE
 }
 
 enum DocumentStatus {
@@ -30,121 +195,4 @@ enum TaxMode {
   MARGIN_SCHEME
   EU_NET_WITH_DEPOSIT
   NON_EU_NET_WITH_DEPOSIT
-}
-
-model Customer {
-  id     String  @id @default(cuid())
-  name   String
-  email  String?
-  phone  String?
-  vatId  String?
-  street String?
-  zip    String?
-  city   String?
-  notes  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  documents Document[]
-}
-
-model ServiceItem {
-  id String @id @default(cuid())
-
-  // Anzeige
-  name     String
-  category String? // z.B. "Aufbereitung Außen"
-  unit     String  @default("Stk") // bleibt für später (falls du willst)
-
-  // Preis-Modell
-  pricingType ServicePricingType @default(AW)
-
-  // AW-Modus:
-  awDurationMinutes Int? // z.B. 60
-  awUnitPriceCents  Int? // z.B. 5882 (=58,82€) pro 1 AW (für die gewählte Dauer)
-  awDefaultQty      Float? @default(1.0) // z.B. 1.0
-
-  // Stundenlohn-Modus:
-  hourlyRateCents Int? // z.B. 4202 (=42,02€/h)
-  defaultMinutes  Int? // z.B. 300 (=5h)
-
-  // Material / Zuschläge (optional, MVP)
-  materialPercent    Int? @default(0) // z.B. 0..100
-  materialFixedCents Int? @default(0)
-
-  // Steuer / Status
-  vatRate Int     @default(19)
-  active  Boolean @default(true)
-
-  // Texte
-  descriptionHtml String?
-  shortText       String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Vehicle {
-  id            String  @id @default(cuid())
-  vin           String?
-  make          String?
-  model         String?
-  year          Int?
-  mileage       Int?
-  purchaseCents Int? // EK
-  notes         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  documents Document[]
-}
-
-model Document {
-  id        String         @id @default(cuid())
-  docType   DocumentType
-  docNumber String
-  status    DocumentStatus @default(DRAFT)
-
-  issueDate  DateTime  @default(now())
-  dueDate    DateTime?
-  validUntil DateTime?
-
-  taxMode       TaxMode @default(REGULAR_VAT)
-  depositCents  Int? // Kaution, optional
-  notesPublic   String?
-  notesInternal String?
-
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id])
-
-  vehicleId String?
-  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
-
-  lines DocumentLine[]
-
-  // Totals gespeichert (damit PDF schnell ist)
-  netTotalCents   Int @default(0)
-  vatTotalCents   Int @default(0)
-  grossTotalCents Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model DocumentLine {
-  id         String   @id @default(cuid())
-  documentId String
-  document   Document @relation(fields: [documentId], references: [id])
-
-  title        String
-  qty          Int    @default(1)
-  unit         String @default("Stk")
-  unitNetCents Int
-  vatRate      Int    @default(19)
-
-  lineNetCents   Int @default(0)
-  lineVatCents   Int @default(0)
-  lineGrossCents Int @default(0)
 }
