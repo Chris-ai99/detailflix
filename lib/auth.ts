@@ -10,6 +10,13 @@ import {
 
 export { AUTH_COOKIE_NAME, WORKSPACE_COOKIE_NAME } from "./auth-session";
 
+function useSecureCookies(): boolean {
+  if (process.env.NODE_ENV !== "production") return false;
+  const appBaseUrl = (process.env.APP_BASE_URL ?? "").trim().toLowerCase();
+  if (appBaseUrl.startsWith("http://")) return false;
+  return true;
+}
+
 export async function getSessionFromCookies(): Promise<AuthSession | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
@@ -27,7 +34,7 @@ export function setAuthCookies(
   token: string,
   workspaceId: string
 ) {
-  const secure = process.env.NODE_ENV === "production";
+  const secure = useSecureCookies();
   const maxAge = getSessionMaxAgeSeconds();
 
   response.cookies.set({
@@ -52,7 +59,7 @@ export function setAuthCookies(
 }
 
 export function clearAuthCookies(response: NextResponse) {
-  const secure = process.env.NODE_ENV === "production";
+  const secure = useSecureCookies();
   for (const cookieName of [AUTH_COOKIE_NAME, WORKSPACE_COOKIE_NAME]) {
     response.cookies.set({
       name: cookieName,
