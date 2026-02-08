@@ -1,4 +1,4 @@
-import { createService } from "./serverActions";
+﻿import { createService } from "./serverActions";
 
 export default function NewServicePage() {
   return (
@@ -116,7 +116,7 @@ export default function NewServicePage() {
           aktiv
         </label>
 
-        <button className="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded">
+        <button className="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded">
           Speichern
         </button>
       </form>

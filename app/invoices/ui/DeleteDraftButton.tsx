@@ -12,7 +12,7 @@ export default function DeleteDraftButton({ id }: { id: string }) {
     <button
       type="button"
       onClick={() => {
-        if (!confirm("Entwurf wirklich löschen?")) return;
+        if (!confirm("Rechnung wirklich löschen?")) return;
         startTransition(async () => {
           await deleteDocument(id);
           router.refresh();

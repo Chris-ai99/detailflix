@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 140" role="img" aria-label="Detailix">
+  <rect width="720" height="140" fill="none"/>
+  <g transform="translate(8 110) skewX(-12)">
+    <text
+      x="0"
+      y="0"
+      font-family="Arial Black, Impact, sans-serif"
+      font-size="110"
+      letter-spacing="8"
+      fill="#e5e7eb"
+    >
+      DETAILIX
+    </text>
+    <path d="M315 18 h64 l-12 18 h-64 z" fill="#ef4444"/>
+  </g>
+</svg>

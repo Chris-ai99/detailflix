@@ -7,6 +7,7 @@ export type EditorLineVM = {
   position: number;
   title: string;
   description: string | null;
+  isMarginScheme: boolean;
 
   // UI-Felder
   quantity: number;     // = qty
@@ -23,12 +24,17 @@ export type EditorLineVM = {
 export type EditorDocVM = {
   id: string;
   docType: Document["docType"];
+  offerType?: any;
   docNumber: string;
   isFinal: boolean;
   status: Document["status"];
   issueDate: Date;
+  serviceDate: Date | null;
   dueDate: Date | null;
+  deliveryDate: Date | null;
+  validUntil: Date | null;
   paidAt: Date | null;
+  sentAt: Date | null;
   notesPublic: string | null;
   notesInternal: string | null;
   customer: any | null;
@@ -43,6 +49,7 @@ export function mapLineToView(l: DocumentLine): EditorLineVM {
     position: l.position,
     title: l.title,
     description: l.description ?? null,
+    isMarginScheme: !!(l as any).isMarginScheme,
 
     quantity: Number(l.qty ?? 0),
     unitPrice: fromCents(l.unitNetCents ?? 0),
@@ -59,12 +66,17 @@ export function mapDocumentToView(doc: any): EditorDocVM {
   return {
     id: doc.id,
     docType: doc.docType,
+    offerType: doc.offerType ?? null,
     docNumber: doc.docNumber,
     isFinal: !!doc.isFinal,
     status: doc.status,
     issueDate: doc.issueDate,
+    serviceDate: doc.serviceDate ?? null,
     dueDate: doc.dueDate ?? null,
+    deliveryDate: doc.deliveryDate ?? null,
+    validUntil: doc.validUntil ?? null,
     paidAt: doc.paidAt ?? null,
+    sentAt: doc.sentAt ?? null,
     notesPublic: doc.notesPublic ?? null,
     notesInternal: doc.notesInternal ?? null,
     customer: doc.customer ?? null,

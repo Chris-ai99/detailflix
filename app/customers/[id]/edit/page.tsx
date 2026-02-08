@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { updateCustomer } from "./serverActions";
 
@@ -93,10 +93,11 @@ export default async function EditCustomerPage({
           className="p-2 rounded bg-slate-800"
         />
 
-        <button className="mt-2 bg-emerald-600 hover:bg-emerald-500 p-2 rounded">
+        <button className="mt-2 bg-cyan-600 hover:bg-cyan-500 p-2 rounded">
           Speichern
         </button>
       </form>
     </div>
   );
 }
+

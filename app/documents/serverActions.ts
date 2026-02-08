@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { DocumentStatus } from "@prisma/client";
 
+function assertDocEditable(status: DocumentStatus) {
+  if (status === DocumentStatus.PAID || status === DocumentStatus.CANCELLED) {
+    throw new Error("Bezahlte oder stornierte Dokumente können nicht mehr bearbeitet werden.");
+  }
+}
+
 /* -----------------------------------------
  * Kunden
  * ----------------------------------------- */
@@ -92,6 +98,13 @@ export async function createCustomer(input: {
 
 // ✅ Kunde ins Dokument setzen
 export async function setDocumentCustomer(documentId: string, customerId: string | null) {
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { status: true },
+  });
+  if (!doc) throw new Error("Dokument nicht gefunden");
+  assertDocEditable(doc.status);
+
   await prisma.document.update({
     where: { id: documentId },
     data: { customerId: customerId || null, vehicleId: null },
@@ -100,6 +113,9 @@ export async function setDocumentCustomer(documentId: string, customerId: string
   revalidatePath(`/documents/${documentId}/edit`);
   revalidatePath("/invoices");
   revalidatePath("/offers");
+  revalidatePath("/orders");
+  revalidatePath("/credit-notes");
+  revalidatePath("/stornos");
 }
 
 /* -----------------------------------------
@@ -175,6 +191,13 @@ export async function createVehicle(input: {
 }
 
 export async function setDocumentVehicle(documentId: string, vehicleId: string | null) {
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { status: true },
+  });
+  if (!doc) throw new Error("Dokument nicht gefunden");
+  assertDocEditable(doc.status);
+
   await prisma.document.update({
     where: { id: documentId },
     data: { vehicleId: vehicleId || null },
@@ -183,6 +206,9 @@ export async function setDocumentVehicle(documentId: string, vehicleId: string |
   revalidatePath(`/documents/${documentId}/edit`);
   revalidatePath("/invoices");
   revalidatePath("/offers");
+  revalidatePath("/orders");
+  revalidatePath("/credit-notes");
+  revalidatePath("/stornos");
 }
 
 /* -----------------------------------------
@@ -190,7 +216,7 @@ export async function setDocumentVehicle(documentId: string, vehicleId: string |
  * ----------------------------------------- */
 
 function formatDocNumber(
-  docType: "OFFER" | "INVOICE" | "PURCHASE_CONTRACT" | "CREDIT_NOTE",
+  docType: "OFFER" | "INVOICE" | "PURCHASE_CONTRACT" | "CREDIT_NOTE" | "STORNO",
   year: number,
   seq: number
 ) {
@@ -201,14 +227,16 @@ function formatDocNumber(
         ? "RE"
         : docType === "CREDIT_NOTE"
           ? "GS"
-          : "KV";
+          : docType === "STORNO"
+            ? "ST"
+          : "ORD";
   const padded = String(seq).padStart(5, "0"); // z.B. 00001
   return `${prefix}-${year}-${padded}`;
 }
 
 // 1) Draft erstellen
 export async function createDraftDocument(
-  docType: "OFFER" | "INVOICE" | "PURCHASE_CONTRACT" | "CREDIT_NOTE"
+  docType: "OFFER" | "INVOICE" | "PURCHASE_CONTRACT" | "CREDIT_NOTE" | "STORNO"
 ) {
   const year = new Date().getFullYear();
   const draftCounter = await prisma.documentDraftCounter.upsert({
@@ -219,13 +247,27 @@ export async function createDraftDocument(
   });
   const draftNumber = `DR-${draftCounter.lastSeq}`;
 
+  const issueDate = new Date();
+  const dueDate = new Date(issueDate);
+  dueDate.setDate(dueDate.getDate() + 10);
+  const serviceDate = new Date(issueDate);
+  const validUntil = new Date(issueDate);
+  validUntil.setDate(validUntil.getDate() + 10);
+  const deliveryDate = new Date(issueDate);
+  deliveryDate.setDate(deliveryDate.getDate() + 7);
+
   const doc = await prisma.document.create({
     data: {
       docType,
+      offerType: docType === "OFFER" ? "OFFER" : undefined,
       docNumber: draftNumber,
       draftNumber,
       status: DocumentStatus.DRAFT,
       isFinal: false,
+      issueDate,
+      ...(docType === "INVOICE" ? { dueDate, serviceDate } : {}),
+      ...(docType === "PURCHASE_CONTRACT" ? { deliveryDate } : {}),
+      ...(docType === "OFFER" ? { validUntil } : {}),
     },
     select: { id: true },
   });
@@ -237,14 +279,25 @@ export async function createDraftDocument(
 export async function updateDocumentBasics(input: {
   id: string;
   issueDate?: Date | string;
+  serviceDate?: Date | string | null;
   dueDate?: Date | string | null;
+  deliveryDate?: Date | string | null;
   validUntil?: Date | string | null;
+  offerType?: "OFFER" | "ESTIMATE" | null;
   taxMode?: any; // TODO: typisieren
   depositCents?: number | null;
   notesPublic?: string | null;
   notesInternal?: string | null;
 }) {
-  const { id, issueDate, dueDate, validUntil, ...rest } = input;
+  const { id, issueDate, serviceDate, dueDate, deliveryDate, validUntil, offerType, ...rest } =
+    input;
+
+  const doc = await prisma.document.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!doc) throw new Error("Dokument nicht gefunden");
+  assertDocEditable(doc.status);
 
   const parseDate = (value: Date | string | null | undefined) => {
     if (value === undefined) return undefined;
@@ -254,19 +307,32 @@ export async function updateDocumentBasics(input: {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
+  const parsedIssueDate = parseDate(issueDate);
+  const parsedServiceDate = parseDate(serviceDate);
+  const parsedDueDate = parseDate(dueDate);
+  const parsedDeliveryDate = parseDate(deliveryDate);
+  const parsedValidUntil = parseDate(validUntil);
+
   await prisma.document.update({
     where: { id },
     data: {
       ...rest,
-      issueDate: parseDate(issueDate),
-      dueDate: parseDate(dueDate),
-      validUntil: parseDate(validUntil),
+      ...(offerType ? { offerType } : {}),
+      // issueDate ist nicht nullable -> bei ungültigem Wert NICHT überschreiben
+      issueDate: parsedIssueDate instanceof Date ? parsedIssueDate : undefined,
+      serviceDate: parsedServiceDate,
+      dueDate: parsedDueDate,
+      deliveryDate: parsedDeliveryDate,
+      validUntil: parsedValidUntil,
     },
   });
 
   revalidatePath(`/documents/${id}/edit`);
   revalidatePath("/invoices");
   revalidatePath("/offers");
+  revalidatePath("/orders");
+  revalidatePath("/credit-notes");
+  revalidatePath("/stornos");
 }
 
 /**
@@ -311,6 +377,9 @@ export async function finalizeDocument(id: string) {
   revalidatePath(`/documents/${id}/edit`);
   revalidatePath("/invoices");
   revalidatePath("/offers");
+  revalidatePath("/orders");
+  revalidatePath("/credit-notes");
+  revalidatePath("/stornos");
 }
 
 /**
@@ -355,6 +424,9 @@ export async function toggleFinalizeDocument(id: string) {
     revalidatePath(`/documents/${id}/edit`);
     revalidatePath("/invoices");
     revalidatePath("/offers");
+    revalidatePath("/orders");
+    revalidatePath("/credit-notes");
+    revalidatePath("/stornos");
     return;
   }
 
@@ -377,8 +449,11 @@ export async function toggleFinalizeDocument(id: string) {
       number = formatDocNumber(doc.docType, year, counter.lastSeq);
     }
 
-    const nextStatus =
-      doc.docType === "INVOICE" || doc.docType === "CREDIT_NOTE"
+  const nextStatus =
+      doc.docType === "INVOICE" ||
+      doc.docType === "CREDIT_NOTE" ||
+      doc.docType === "STORNO" ||
+      doc.docType === "PURCHASE_CONTRACT"
         ? DocumentStatus.SENT
         : doc.status;
 
@@ -395,6 +470,9 @@ export async function toggleFinalizeDocument(id: string) {
   revalidatePath(`/documents/${id}/edit`);
   revalidatePath("/invoices");
   revalidatePath("/offers");
+  revalidatePath("/orders");
+  revalidatePath("/credit-notes");
+  revalidatePath("/stornos");
 }
 
 /* -----------------------------------------
@@ -408,11 +486,13 @@ export async function toggleFinalizeDocument(id: string) {
 export async function deleteDocument(id: string) {
   const exists = await prisma.document.findUnique({
     where: { id },
-    select: { id: true, isFinal: true },
+    select: { id: true, status: true },
   });
 
   if (!exists) return;
-  if (exists.isFinal) throw new Error("Finale Dokumente dürfen nicht gelöscht werden.");
+  if (exists.status === DocumentStatus.PAID || exists.status === DocumentStatus.CANCELLED) {
+    throw new Error("Bezahlte oder stornierte Dokumente dürfen nicht gelöscht werden.");
+  }
 
   await prisma.$transaction(async (tx) => {
     // Lines löschen (falls du DocumentLine hast)
@@ -422,6 +502,106 @@ export async function deleteDocument(id: string) {
 
   revalidatePath("/invoices");
   revalidatePath("/offers");
+  revalidatePath("/credit-notes");
+  revalidatePath("/stornos");
+}
+
+/**
+ * Angebot -> Rechnung umwandeln
+ */
+export async function convertOfferToInvoice(offerId: string) {
+  const offer = await prisma.document.findUnique({
+    where: { id: offerId },
+    include: { lines: true },
+  });
+
+  if (!offer) throw new Error("Angebot nicht gefunden");
+  if (offer.docType !== "OFFER") throw new Error("Nur Angebote können umgewandelt werden.");
+  if (!offer.isFinal) throw new Error("Nur finale Angebote können umgewandelt werden.");
+  if (offer.status === DocumentStatus.CONVERTED) {
+    throw new Error("Angebot wurde bereits umgewandelt.");
+  }
+
+  const year = new Date().getFullYear();
+  const draftCounter = await prisma.documentDraftCounter.upsert({
+    where: { docType_year: { docType: "INVOICE", year } },
+    update: { lastSeq: { increment: 1 } },
+    create: { docType: "INVOICE", year, lastSeq: 1 },
+    select: { lastSeq: true },
+  });
+  const draftNumber = `DR-${draftCounter.lastSeq}`;
+
+  const issueDate = new Date();
+  const dueDate = new Date(issueDate);
+  dueDate.setDate(dueDate.getDate() + 10);
+
+  const invoice = await prisma.document.create({
+    data: {
+      docType: "INVOICE",
+      docNumber: draftNumber,
+      draftNumber,
+      status: DocumentStatus.DRAFT,
+      isFinal: false,
+      issueDate,
+      dueDate,
+      serviceDate,
+      customerId: offer.customerId,
+      vehicleId: offer.vehicleId,
+      sourceOfferId: offer.id,
+    },
+    select: { id: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    let position = 1;
+    for (const source of offer.lines ?? []) {
+      const qty = Number(source.qty ?? 0);
+      if (!qty) continue;
+      const unitNetCents = Number(source.unitNetCents ?? 0);
+      const vatRate = normalizeVatRate(source.vatRate ?? 19);
+      const discountPct = Number(source.discountPct ?? 0);
+      const isMarginScheme = !!source.isMarginScheme;
+
+      const { net, vat, gross } = calcLineCents({
+        qty,
+        unitNetCents,
+        vatRate,
+        discountPct,
+      });
+
+      await tx.documentLine.create({
+        data: {
+          documentId: invoice.id,
+          position,
+          title: source.title,
+          description: source.description ?? null,
+          qty,
+          unitNetCents,
+          vatRate,
+          isMarginScheme,
+          discountPct,
+          lineNetCents: net,
+          lineVatCents: vat,
+          lineGrossCents: gross,
+        },
+      });
+      position += 1;
+    }
+
+    await recalcDocumentTotalsTx(tx, invoice.id);
+
+    await tx.document.update({
+      where: { id: offer.id },
+      data: { status: DocumentStatus.CONVERTED },
+    });
+  });
+
+  revalidatePath("/offers");
+  revalidatePath("/invoices");
+  revalidatePath(`/documents/${offerId}/edit`);
+  revalidatePath(`/documents/${invoice.id}/edit`);
+
+  return invoice.id;
 }
 
 /**
@@ -430,12 +610,16 @@ export async function deleteDocument(id: string) {
 export async function cancelFinalDocument(id: string) {
   const doc = await prisma.document.findUnique({
     where: { id },
-    select: { isFinal: true, status: true },
+    select: { docType: true, isFinal: true, status: true },
   });
 
   if (!doc) throw new Error("Dokument nicht gefunden");
+  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen können storniert werden.");
   if (!doc.isFinal) throw new Error("Nur finale Dokumente werden storniert.");
   if (doc.status === DocumentStatus.CANCELLED) return;
+  if (doc.status !== DocumentStatus.PAID) {
+    throw new Error("Nur bezahlte Rechnungen können storniert werden.");
+  }
 
   await prisma.document.update({
     where: { id },
@@ -457,6 +641,9 @@ export async function setDocumentPaid(id: string, paidAt: Date | string | null) 
   if (!doc.isFinal) throw new Error("Nur finale Rechnungen können bezahlt werden.");
   if (doc.status === DocumentStatus.CANCELLED) {
     throw new Error("Stornierte Rechnungen können nicht bezahlt werden.");
+  }
+  if (doc.status === DocumentStatus.PAID && paidAt === null) {
+    throw new Error("Bezahlte Rechnungen können nicht auf unbezahlt gesetzt werden.");
   }
 
   const parseDate = (value: Date | string | null) => {
@@ -480,6 +667,33 @@ export async function setDocumentPaid(id: string, paidAt: Date | string | null) 
   revalidatePath(`/documents/${id}/edit`);
 }
 
+export async function setDocumentSent(id: string) {
+  const doc = await prisma.document.findUnique({
+    where: { id },
+    select: { docType: true, isFinal: true, status: true, sentAt: true },
+  });
+
+  if (!doc) throw new Error("Dokument nicht gefunden");
+  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen kÃ¶nnen versendet werden.");
+  if (!doc.isFinal) throw new Error("Nur finale Rechnungen kÃ¶nnen versendet werden.");
+  if (doc.status === DocumentStatus.CANCELLED) {
+    throw new Error("Stornierte Rechnungen kÃ¶nnen nicht versendet werden.");
+  }
+  if (doc.status === DocumentStatus.PAID) {
+    throw new Error("Bezahlte Rechnungen mÃ¼ssen nicht mehr versendet werden.");
+  }
+  if (doc.status === DocumentStatus.SENT && doc.sentAt) return;
+
+  await prisma.document.update({
+    where: { id },
+    data: { status: DocumentStatus.SENT, sentAt: new Date() },
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath(`/documents/${id}/edit`);
+  revalidatePath(`/documents/${id}/view`);
+}
+
 export async function createCreditNoteFromInvoice(input: {
   invoiceId: string;
   lines: { lineId: string; qty: number }[];
@@ -495,6 +709,9 @@ export async function createCreditNoteFromInvoice(input: {
   if (!invoice) throw new Error("Rechnung nicht gefunden");
   if (invoice.docType !== "INVOICE") throw new Error("Nur Rechnungen können gutgeschrieben werden.");
   if (!invoice.isFinal) throw new Error("Nur finale Rechnungen können gutgeschrieben werden.");
+  if (invoice.status !== DocumentStatus.PAID) {
+    throw new Error("Nur bezahlte Rechnungen können gutgeschrieben werden.");
+  }
 
   const lineMap = new Map(invoice.lines.map((l) => [l.id, l]));
   const selected = lines
@@ -537,8 +754,9 @@ export async function createCreditNoteFromInvoice(input: {
     let position = 1;
     for (const { source, qty } of selected) {
       const unitNetCents = -Math.abs(source.unitNetCents ?? 0);
-      const vatRate = source.vatRate ?? 19;
+      const vatRate = normalizeVatRate(source.vatRate ?? 19);
       const discountPct = source.discountPct ?? 0;
+      const isMarginScheme = !!source.isMarginScheme;
 
       const { net, vat, gross } = calcLineCents({
         qty,
@@ -556,6 +774,7 @@ export async function createCreditNoteFromInvoice(input: {
           qty,
           unitNetCents,
           vatRate,
+          isMarginScheme,
           discountPct,
           lineNetCents: net,
           lineVatCents: vat,
@@ -571,8 +790,105 @@ export async function createCreditNoteFromInvoice(input: {
 
   revalidatePath("/invoices");
   revalidatePath(`/documents/${creditDoc.id}/edit`);
+  revalidatePath("/credit-notes");
 
   return creditDoc.id;
+}
+
+export async function createStornoFromInvoice(input: { invoiceId: string }) {
+  const { invoiceId } = input;
+
+  const invoice = await prisma.document.findUnique({
+    where: { id: invoiceId },
+    include: { lines: true },
+  });
+
+  if (!invoice) throw new Error("Rechnung nicht gefunden");
+  if (invoice.docType !== "INVOICE") throw new Error("Nur Rechnungen können storniert werden.");
+  if (!invoice.isFinal) throw new Error("Nur finale Rechnungen können storniert werden.");
+  if (invoice.status === DocumentStatus.CANCELLED) {
+    throw new Error("Rechnung ist bereits storniert.");
+  }
+  if (invoice.status !== DocumentStatus.PAID) {
+    throw new Error("Nur bezahlte Rechnungen können storniert werden.");
+  }
+
+  const year = new Date().getFullYear();
+  const draftCounter = await prisma.documentDraftCounter.upsert({
+    where: { docType_year: { docType: "STORNO", year } },
+    update: { lastSeq: { increment: 1 } },
+    create: { docType: "STORNO", year, lastSeq: 1 },
+    select: { lastSeq: true },
+  });
+  const draftNumber = `DR-${draftCounter.lastSeq}`;
+
+  const stornoDoc = await prisma.document.create({
+    data: {
+      docType: "STORNO",
+      docNumber: draftNumber,
+      draftNumber,
+      status: DocumentStatus.DRAFT,
+      isFinal: false,
+      issueDate: new Date(),
+      customerId: invoice.customerId,
+      vehicleId: invoice.vehicleId,
+      creditForId: invoice.id,
+    },
+    select: { id: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    let position = 1;
+    for (const source of invoice.lines ?? []) {
+      const qty = Math.abs(Number(source.qty ?? 0));
+      if (!qty) continue;
+      const unitNetCents = -Math.abs(source.unitNetCents ?? 0);
+      const vatRate = normalizeVatRate(source.vatRate ?? 19);
+      const discountPct = source.discountPct ?? 0;
+      const isMarginScheme = !!source.isMarginScheme;
+
+      const { net, vat, gross } = calcLineCents({
+        qty,
+        unitNetCents,
+        vatRate,
+        discountPct,
+      });
+
+      await tx.documentLine.create({
+        data: {
+          documentId: stornoDoc.id,
+          position,
+          title: source.title,
+          description: source.description ?? null,
+          qty,
+          unitNetCents,
+          vatRate,
+          isMarginScheme,
+          discountPct,
+          lineNetCents: net,
+          lineVatCents: vat,
+          lineGrossCents: gross,
+        },
+      });
+
+      position += 1;
+    }
+
+    await recalcDocumentTotalsTx(tx, stornoDoc.id);
+
+    // Originalrechnung sperren/kennzeichnen
+    await tx.document.update({
+      where: { id: invoice.id },
+      data: { status: DocumentStatus.CANCELLED, cancelledAt: new Date() },
+    });
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath("/stornos");
+  revalidatePath(`/documents/${invoiceId}/edit`);
+  revalidatePath(`/documents/${stornoDoc.id}/edit`);
+
+  return stornoDoc.id;
 }
 // ==========================
 // STEP 3: DIENSTLEISTUNGEN / LINES
@@ -594,6 +910,13 @@ function calcLineCents(params: {
   const gross = net + vat;
 
   return { net, vat, gross };
+}
+
+function normalizeVatRate(value: unknown) {
+  const v = Number(value);
+  if (v === 7) return 7;
+  if (v === 0) return 0; // Differenzbesteuerung / kein Ausweis
+  return 19;
 }
 
 // Helper: Summe am Document aus allen Lines aktualisieren
@@ -714,24 +1037,18 @@ export async function addCustomLine(input: {
   unitPrice?: number;
   discount?: number;
   vatRate?: number;
+  isMarginScheme?: boolean;
 }) {
-  const {
-    documentId,
-    title,
-    description,
-    qty = 1,
-    unitPrice = 0,
-    discount = 0,
-    vatRate = 19,
-  } = input;
+  const { documentId, title, description, qty = 1, unitPrice = 0, discount = 0, vatRate = 19 } =
+    input;
 
   await prisma.$transaction(async (tx) => {
     const doc = await tx.document.findUnique({
       where: { id: documentId },
-      select: { isFinal: true },
+      select: { status: true },
     });
     if (!doc) throw new Error("Document not found");
-    if (doc.isFinal) throw new Error("Final document cannot be edited");
+    assertDocEditable(doc.status);
 
     const last = await tx.documentLine.aggregate({
       where: { documentId },
@@ -739,13 +1056,19 @@ export async function addCustomLine(input: {
     });
     const position = (last._max.position ?? 0) + 1;
 
-    const unitNetCents = Math.round(Number(unitPrice) * 100);
+    const normalizedVatRate = normalizeVatRate(vatRate);
+    const isMarginScheme = Boolean(input.isMarginScheme) && normalizedVatRate === 0;
+    const unitGrossCents = Math.round(Number(unitPrice) * 100);
+    const unitNetCents =
+      normalizedVatRate === 0
+        ? unitGrossCents
+        : Math.round(unitGrossCents / (1 + normalizedVatRate / 100));
     const discountPct = Number(discount) || 0;
 
     const { net, vat, gross } = calcLineCents({
       qty: Number(qty) || 1,
       unitNetCents,
-      vatRate: Number(vatRate) || 19,
+      vatRate: normalizedVatRate,
       discountPct,
     });
 
@@ -757,7 +1080,8 @@ export async function addCustomLine(input: {
         description: description ?? null,
         qty: Number(qty) || 1,
         unitNetCents,
-        vatRate: Number(vatRate) || 19,
+        vatRate: normalizedVatRate,
+        isMarginScheme,
         discountPct,
         lineNetCents: net,
         lineVatCents: vat,
@@ -778,10 +1102,10 @@ export async function addLineFromService(documentId: string, serviceId: string) 
   await prisma.$transaction(async (tx) => {
     const doc = await tx.document.findUnique({
       where: { id: documentId },
-      select: { isFinal: true },
+      select: { status: true },
     });
     if (!doc) throw new Error("Document not found");
-    if (doc.isFinal) throw new Error("Final document cannot be edited");
+    assertDocEditable(doc.status);
 
     const service = await tx.serviceItem.findUnique({
       where: { id: serviceId },
@@ -818,7 +1142,7 @@ export async function addLineFromService(documentId: string, serviceId: string) 
       qty = minutes / 60;
     }
 
-    const vatRate = service.vatRate ?? 19;
+    const vatRate = normalizeVatRate(service.vatRate ?? 19);
     const discountPct = 0;
 
     const { net, vat, gross } = calcLineCents({ qty, unitNetCents, vatRate, discountPct });
@@ -849,10 +1173,10 @@ export async function addLineFromStockVehicle(documentId: string, vehicleId: str
   await prisma.$transaction(async (tx) => {
     const doc = await tx.document.findUnique({
       where: { id: documentId },
-      select: { isFinal: true },
+      select: { status: true },
     });
     if (!doc) throw new Error("Document not found");
-    if (doc.isFinal) throw new Error("Final document cannot be edited");
+    assertDocEditable(doc.status);
 
     const vehicle = await tx.vehicle.findUnique({
       where: { id: vehicleId },
@@ -912,10 +1236,10 @@ export async function moveDocumentLine(input: {
   await prisma.$transaction(async (tx) => {
     const doc = await tx.document.findUnique({
       where: { id: documentId },
-      select: { isFinal: true },
+      select: { status: true },
     });
     if (!doc) throw new Error("Document not found");
-    if (doc.isFinal) throw new Error("Final document cannot be edited");
+    assertDocEditable(doc.status);
 
     const current = await tx.documentLine.findUnique({
       where: { id: lineId },
@@ -957,9 +1281,10 @@ export async function updateDocumentLine(
     title?: string;              // optional
     description?: string | null; // optional
     quantity?: number;           // UI -> qty
-    unitPrice?: number;          // €    -> unitNetCents
+    unitPrice?: number;          // € (brutto) -> unitNetCents
     discount?: number;           // %    -> discountPct
     vatRate?: number;            // %
+    isMarginScheme?: boolean;
   }
 ) {
   const line = await prisma.documentLine.findUnique({
@@ -971,10 +1296,10 @@ export async function updateDocumentLine(
   await prisma.$transaction(async (tx) => {
     const doc = await tx.document.findUnique({
       where: { id: line.documentId },
-      select: { isFinal: true },
+      select: { status: true },
     });
     if (!doc) throw new Error("Document not found");
-    if (doc.isFinal) throw new Error("Final document cannot be edited");
+    assertDocEditable(doc.status);
 
     const current = await tx.documentLine.findUnique({
       where: { id: lineId },
@@ -982,6 +1307,7 @@ export async function updateDocumentLine(
         qty: true,
         unitNetCents: true,
         vatRate: true,
+        isMarginScheme: true,
         discountPct: true,
         title: true,
         description: true,
@@ -990,15 +1316,25 @@ export async function updateDocumentLine(
     if (!current) throw new Error("Line not found");
 
     const qty = patch.quantity != null ? Number(patch.quantity) : current.qty;
-    const unitNetCents =
-      patch.unitPrice != null
-        ? Math.round(Number(patch.unitPrice) * 100)
-        : current.unitNetCents;
-
     const discountPct =
       patch.discount != null ? Number(patch.discount) : (current.discountPct ?? 0);
 
-    const vatRate = patch.vatRate != null ? Number(patch.vatRate) : current.vatRate;
+    const normalizedVatRate =
+      patch.vatRate != null ? normalizeVatRate(patch.vatRate) : normalizeVatRate(current.vatRate);
+
+    const isMarginScheme =
+      patch.isMarginScheme != null
+        ? Boolean(patch.isMarginScheme) && normalizedVatRate === 0
+        : Boolean(current.isMarginScheme) && normalizedVatRate === 0;
+
+    const unitNetCents =
+      patch.unitPrice != null
+        ? (() => {
+            const unitGrossCents = Math.round(Number(patch.unitPrice) * 100);
+            if (normalizedVatRate === 0) return unitGrossCents;
+            return Math.round(unitGrossCents / (1 + normalizedVatRate / 100));
+          })()
+        : current.unitNetCents;
 
     const title =
       patch.title !== undefined ? (patch.title ?? "") : current.title;
@@ -1009,7 +1345,7 @@ export async function updateDocumentLine(
     const { net, vat, gross } = calcLineCents({
       qty,
       unitNetCents,
-      vatRate,
+      vatRate: normalizedVatRate,
       discountPct,
     });
 
@@ -1018,7 +1354,8 @@ export async function updateDocumentLine(
       data: {
         qty,
         unitNetCents,
-        vatRate,
+        vatRate: normalizedVatRate,
+        isMarginScheme,
         discountPct,
         title,
         description,
@@ -1047,12 +1384,26 @@ export async function deleteDocumentLine(lineId: string) {
   await prisma.$transaction(async (tx) => {
     const doc = await tx.document.findUnique({
       where: { id: line.documentId },
-      select: { isFinal: true },
+      select: { status: true },
     });
     if (!doc) throw new Error("Document not found");
-    if (doc.isFinal) throw new Error("Final document cannot be edited");
+    assertDocEditable(doc.status);
 
     await tx.documentLine.delete({ where: { id: lineId } });
+    // Nach dem Löschen Positionen neu nummerieren, damit keine Lücken entstehen.
+    const remaining = await tx.documentLine.findMany({
+      where: { documentId: line.documentId },
+      orderBy: { position: "asc" },
+      select: { id: true },
+    });
+
+    for (let i = 0; i < remaining.length; i += 1) {
+      await tx.documentLine.update({
+        where: { id: remaining[i].id },
+        data: { position: i + 1 },
+      });
+    }
+
     await recalcDocumentTotalsTx(tx, line.documentId);
   });
 

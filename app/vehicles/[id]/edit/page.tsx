@@ -1,4 +1,4 @@
-// app/vehicles/[id]/edit/page.tsx
+﻿// app/vehicles/[id]/edit/page.tsx
 import Link from "next/link";
 import { getVehicle, updateVehicle } from "../serverActions";
 
@@ -22,12 +22,12 @@ export default async function EditVehiclePage({
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Fahrzeug bearbeiten</h1>
-        <Link className="rounded px-3 py-2 hover:bg-slate-800" href={`/vehicles/${v.id}`}>
+        <Link className="rounded px-3 py-2 hover:bg-slate-700/60" href={`/vehicles/${v.id}`}>
           Zurück
         </Link>
       </div>
 
-      <form action={action} className="space-y-4 rounded-lg border border-slate-800 bg-slate-900/40 p-6">
+      <form action={action} className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/60 p-6">
         <div className="grid grid-cols-2 gap-4">
           <Field label="VIN" name="vin" defaultValue={v.vin ?? ""} />
           <Field label="Baujahr" name="year" type="number" defaultValue={v.year?.toString() ?? ""} />
@@ -42,12 +42,12 @@ export default async function EditVehiclePage({
           <textarea
             name="notes"
             defaultValue={v.notes ?? ""}
-            className="w-full rounded border border-slate-700 bg-slate-950 p-2"
+            className="w-full rounded border border-slate-700 bg-slate-800 p-2"
             rows={4}
           />
         </div>
 
-        <button className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-700">
+        <button className="rounded bg-cyan-600 px-4 py-2 text-sm font-medium hover:bg-cyan-700">
           Änderungen speichern
         </button>
       </form>
@@ -73,8 +73,9 @@ function Field({
         name={name}
         type={type}
         defaultValue={defaultValue}
-        className="w-full rounded border border-slate-700 bg-slate-950 p-2"
+        className="w-full rounded border border-slate-700 bg-slate-800 p-2"
       />
     </div>
   );
 }
+

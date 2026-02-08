@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import EditorClient from "./ui/EditorClient";
 import { mapDocumentToView } from "@/app/documents/_logic/mapDoc";
 
@@ -24,6 +24,10 @@ export default async function DocumentEditPage({
   });
 
   if (!doc) return notFound();
+
+  if (doc.docType === "INVOICE" && doc.isFinal) {
+    redirect(`/documents/${id}/view`);
+  }
 
   const viewModel = mapDocumentToView(doc);
 

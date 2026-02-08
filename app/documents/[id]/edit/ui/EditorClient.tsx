@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  finalizeDocument,
   toggleFinalizeDocument,
   updateDocumentBasics,
   searchCustomers,
@@ -19,9 +20,8 @@ import {
   deleteDocumentLine,
   deleteDocument,
   setDocumentPaid,
-  cancelFinalDocument,
   createCreditNoteFromInvoice,
-
+  createStornoFromInvoice,
 } from "@/app/documents/serverActions";
 
 function toInputDate(value: Date | string | null | undefined) {
@@ -31,13 +31,34 @@ function toInputDate(value: Date | string | null | undefined) {
   return date.toISOString().slice(0, 10);
 }
 
+function addDaysToInputDate(value: string, days: number) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function formatDocNumber(doc: { docNumber: string }) {
   return doc.docNumber;
 }
 
-function formatDocLabel(doc: { docNumber: string; isFinal: boolean; docType: string }) {
+function formatDocLabel(doc: {
+  docNumber: string;
+  isFinal: boolean;
+  docType: string;
+  offerType?: string | null;
+}) {
   if (doc.isFinal) return formatDocNumber(doc);
   if (doc.docType === "INVOICE") return `Rechnungsentwurf ${doc.docNumber}`;
+  if (doc.docType === "OFFER") {
+    return doc.offerType === "ESTIMATE"
+      ? `Kostenvoranschlag-Entwurf ${doc.docNumber}`
+      : `Angebotsentwurf ${doc.docNumber}`;
+  }
+  if (doc.docType === "PURCHASE_CONTRACT") return `Auftragsentwurf ${doc.docNumber}`;
+  if (doc.docType === "CREDIT_NOTE") return `Gutschrift-Entwurf ${doc.docNumber}`;
+  if (doc.docType === "STORNO") return `Storno-Entwurf ${doc.docNumber}`;
   return `Entwurf ${doc.docNumber}`;
 }
 
@@ -50,6 +71,55 @@ export default function EditorClient({ doc }: { doc: any }) {
     Record<string, { selected: boolean; qty: number }>
   >({});
   const [step, setStep] = useState(1);
+  const [issueDateInput, setIssueDateInput] = useState(() => toInputDate(doc.issueDate));
+  const [serviceDateAuto, setServiceDateAuto] = useState(() => doc.docType === "INVOICE");
+  const [dueDateAuto, setDueDateAuto] = useState(() => doc.docType === "INVOICE");
+  const [validUntilAuto, setValidUntilAuto] = useState(() => doc.docType === "OFFER");
+  const [deliveryDateAuto, setDeliveryDateAuto] = useState(
+    () => doc.docType === "PURCHASE_CONTRACT"
+  );
+  const [serviceDateInput, setServiceDateInput] = useState(() => {
+    const service = toInputDate(doc.serviceDate);
+    if (service) return service;
+    if (doc.docType === "INVOICE") return toInputDate(doc.issueDate);
+    return "";
+  });
+  const [dueDateInput, setDueDateInput] = useState(() => {
+    const due = toInputDate(doc.dueDate);
+    if (due) return due;
+    if (doc.docType === "INVOICE") return addDaysToInputDate(toInputDate(doc.issueDate), 10);
+    return "";
+  });
+  const [deliveryDateInput, setDeliveryDateInput] = useState(() => {
+    const delivery = toInputDate(doc.deliveryDate);
+    if (delivery) return delivery;
+    if (doc.docType === "PURCHASE_CONTRACT") {
+      return addDaysToInputDate(toInputDate(doc.issueDate), 7);
+    }
+    return "";
+  });
+  const [validUntilInput, setValidUntilInput] = useState(() => {
+    const valid = toInputDate(doc.validUntil);
+    if (valid) return valid;
+    if (doc.docType === "OFFER") return addDaysToInputDate(toInputDate(doc.issueDate), 10);
+    return "";
+  });
+  const isLocked =
+    doc.status === "PAID" || doc.status === "CANCELLED" || (doc.docType === "INVOICE" && doc.isFinal);
+  const docLabel =
+    doc.docType === "INVOICE"
+      ? "Rechnung"
+      : doc.docType === "OFFER"
+        ? doc.offerType === "ESTIMATE"
+          ? "Kostenvoranschlag"
+          : "Angebot"
+        : doc.docType === "CREDIT_NOTE"
+          ? "Gutschrift"
+        : doc.docType === "STORNO"
+            ? "Storno"
+            : doc.docType === "PURCHASE_CONTRACT"
+              ? "Auftrag"
+              : "Dokument";
 
   const pdfUrl = useMemo(() => {
     // ts verhindert Cache
@@ -57,8 +127,67 @@ export default function EditorClient({ doc }: { doc: any }) {
   }, [doc.id, refreshKey]);
 
   useEffect(() => {
+    // Reset when switching to another document
+    const issue = toInputDate(doc.issueDate);
+    const due = toInputDate(doc.dueDate);
+    setIssueDateInput(issue);
+
+    if (doc.docType === "INVOICE") {
+      const autoDue = addDaysToInputDate(issue, 10);
+      setDueDateInput(due || autoDue);
+      setDueDateAuto(!due || due === autoDue);
+      const service = toInputDate(doc.serviceDate);
+      const autoService = issue;
+      setServiceDateInput(service || autoService);
+      setServiceDateAuto(!service || service === autoService);
+      setValidUntilInput("");
+      setValidUntilAuto(false);
+      setDeliveryDateInput("");
+      setDeliveryDateAuto(false);
+    } else if (doc.docType === "OFFER") {
+      const valid = toInputDate(doc.validUntil);
+      const autoValid = addDaysToInputDate(issue, 10);
+      setValidUntilInput(valid || autoValid);
+      setValidUntilAuto(!valid || valid === autoValid);
+      setDueDateInput("");
+      setDueDateAuto(false);
+      setServiceDateInput("");
+      setServiceDateAuto(false);
+      setDeliveryDateInput("");
+      setDeliveryDateAuto(false);
+    } else if (doc.docType === "PURCHASE_CONTRACT") {
+      const delivery = toInputDate(doc.deliveryDate);
+      const autoDelivery = addDaysToInputDate(issue, 7);
+      setDeliveryDateInput(delivery || autoDelivery);
+      setDeliveryDateAuto(!delivery || delivery === autoDelivery);
+      setDueDateInput("");
+      setDueDateAuto(false);
+      setServiceDateInput("");
+      setServiceDateAuto(false);
+      setValidUntilInput("");
+      setValidUntilAuto(false);
+    } else {
+      setDueDateInput(due);
+      setDueDateAuto(false);
+      setServiceDateInput("");
+      setServiceDateAuto(false);
+      setValidUntilInput("");
+      setValidUntilAuto(false);
+      setDeliveryDateInput("");
+      setDeliveryDateAuto(false);
+    }
+  }, [doc.id]);
+
+  useEffect(() => {
     setPaidAtInput(toInputDate(doc.paidAt ?? new Date()));
   }, [doc.paidAt]);
+
+  useEffect(() => {
+    // Step 5 gibt es nur bei bezahlten Rechnungen.
+    if (step !== 5) return;
+    if (doc.docType === "INVOICE" && doc.status === "PAID") return;
+    setStep(4);
+  }, [step, doc.docType, doc.status]);
 
   useEffect(() => {
     const next: Record<string, { selected: boolean; qty: number }> = {};
@@ -72,13 +201,23 @@ export default function EditorClient({ doc }: { doc: any }) {
   }, [doc.lines]);
 
   function saveBasics(formData: FormData) {
+    if (isLocked) return;
     const notesPublic = String(formData.get("notesPublic") ?? "").trim() || null;
     const notesInternal = String(formData.get("notesInternal") ?? "").trim() || null;
     const issueDateRaw = String(formData.get("issueDate") ?? "").trim();
+    const serviceDateRaw = String(formData.get("serviceDate") ?? "").trim();
     const dueDateRaw = String(formData.get("dueDate") ?? "").trim();
+    const deliveryDateRaw = String(formData.get("deliveryDate") ?? "").trim();
+    const validUntilRaw = String(formData.get("validUntil") ?? "").trim();
+    const offerTypeRaw = String(formData.get("offerType") ?? "").trim();
 
     const issueDate = issueDateRaw ? new Date(issueDateRaw) : undefined;
+    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
     const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+    const deliveryDate = deliveryDateRaw ? new Date(deliveryDateRaw) : null;
+    const validUntil = validUntilRaw ? new Date(validUntilRaw) : null;
+    const offerType =
+      offerTypeRaw === "ESTIMATE" || offerTypeRaw === "OFFER" ? offerTypeRaw : undefined;
 
     startTransition(async () => {
       await updateDocumentBasics({
@@ -86,7 +225,11 @@ export default function EditorClient({ doc }: { doc: any }) {
         notesPublic,
         notesInternal,
         issueDate,
-        dueDate,
+        serviceDate: doc.docType === "INVOICE" ? serviceDate : undefined,
+        dueDate: doc.docType === "INVOICE" ? dueDate : undefined,
+        deliveryDate: doc.docType === "PURCHASE_CONTRACT" ? deliveryDate : undefined,
+        validUntil: doc.docType === "OFFER" ? validUntil : undefined,
+        offerType: doc.docType === "OFFER" ? offerType : undefined,
       });
 
       // PDF Preview aktualisieren
@@ -98,6 +241,7 @@ export default function EditorClient({ doc }: { doc: any }) {
   }
 
   function toggleFinal() {
+    if (isLocked) return;
     startTransition(async () => {
       await toggleFinalizeDocument(doc.id);
 
@@ -109,27 +253,20 @@ export default function EditorClient({ doc }: { doc: any }) {
     });
   }
 
+  function finalizeNow() {
+    if (isLocked || doc.isFinal) return;
+    startTransition(async () => {
+      await finalizeDocument(doc.id);
+      setRefreshKey((k) => k + 1);
+      router.refresh();
+      router.push(`/documents/${doc.id}/view`);
+    });
+  }
+
   function markPaid() {
     if (!paidAtInput) return;
     startTransition(async () => {
       await setDocumentPaid(doc.id, new Date(paidAtInput));
-      setRefreshKey((k) => k + 1);
-      router.refresh();
-    });
-  }
-
-  function markUnpaid() {
-    startTransition(async () => {
-      await setDocumentPaid(doc.id, null);
-      setRefreshKey((k) => k + 1);
-      router.refresh();
-    });
-  }
-
-  function cancelInvoice() {
-    if (!confirm("Rechnung wirklich stornieren?")) return;
-    startTransition(async () => {
-      await cancelFinalDocument(doc.id);
       setRefreshKey((k) => k + 1);
       router.refresh();
     });
@@ -151,11 +288,35 @@ export default function EditorClient({ doc }: { doc: any }) {
     });
   }
 
-  function deleteDraft() {
-    if (!confirm("Entwurf wirklich löschen?")) return;
+  function createStorno() {
+    if (!confirm("Storno-Beleg erstellen und Originalrechnung stornieren?")) return;
+
+    startTransition(async () => {
+      const stornoId = await createStornoFromInvoice({
+        invoiceId: doc.id,
+      });
+      router.push(`/documents/${stornoId}/edit`);
+    });
+  }
+
+  function deleteThisDocument() {
+    if (isLocked) return;
+    if (!confirm(`${docLabel} wirklich löschen?`)) return;
     startTransition(async () => {
       await deleteDocument(doc.id);
-      router.push(doc.docType === "INVOICE" ? "/invoices" : "/offers");
+      router.push(
+        doc.docType === "INVOICE"
+          ? "/invoices"
+          : doc.docType === "OFFER"
+            ? "/offers"
+            : doc.docType === "PURCHASE_CONTRACT"
+              ? "/orders"
+            : doc.docType === "CREDIT_NOTE"
+              ? "/credit-notes"
+              : doc.docType === "STORNO"
+                ? "/stornos"
+                : "/dashboard"
+      );
     });
   }
 
@@ -168,6 +329,7 @@ export default function EditorClient({ doc }: { doc: any }) {
   const [linePrice, setLinePrice] = useState(0);
   const [lineDiscount, setLineDiscount] = useState(0);
   const [lineVatRate, setLineVatRate] = useState(19);
+  const [lineIsMarginScheme, setLineIsMarginScheme] = useState(false);
   const [, setSelectedItem] = useState<{ type: "service" | "stock"; item: any } | null>(null);
   const [activeLineId, setActiveLineId] = useState<string | null>(doc.lines?.[0]?.id ?? null);
 
@@ -181,21 +343,21 @@ export default function EditorClient({ doc }: { doc: any }) {
   // Dienstleistungen + Fahrzeugbestand suchen (debounced)
   useEffect(() => {
     const q = itemQuery.trim();
-    const t = setTimeout(() => {
-      startTransition(async () => {
-        const [services, stock] = await Promise.all([
-          searchServices(q),
-          searchStockVehicles(q),
-        ]);
-        const combined = [
-          ...services.map((s: any) => ({ type: "service" as const, item: s })),
-          ...stock.map((v: any) => ({ type: "stock" as const, item: v })),
-        ];
-        setItemResults(combined);
-      });
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const [services, stock] = await Promise.all([searchServices(q), searchStockVehicles(q)]);
+      if (cancelled) return;
+      const combined = [
+        ...services.map((s: any) => ({ type: "service" as const, item: s })),
+        ...stock.map((v: any) => ({ type: "stock" as const, item: v })),
+      ];
+      setItemResults(combined);
     }, 200);
 
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [itemQuery]);
 
   function selectService(service: any) {
@@ -212,9 +374,13 @@ export default function EditorClient({ doc }: { doc: any }) {
     setShowItemResults(false);
     setItemQuery(service.name ?? "");
     setLineQty(qty);
-    setLinePrice(unitPrice);
     setLineDiscount(0);
-    setLineVatRate(Number(service.vatRate ?? 19));
+    const rateRaw = Number(service.vatRate ?? 19);
+    const rate = rateRaw === 7 ? 7 : rateRaw === 0 ? 0 : 19;
+    setLineVatRate(rate);
+    const unitGross = rate === 0 ? unitPrice : unitPrice * (1 + rate / 100);
+    setLinePrice(unitGross);
+    setLineIsMarginScheme(false);
     setLineDescription(service.shortText ?? "");
   }
 
@@ -225,11 +391,14 @@ export default function EditorClient({ doc }: { doc: any }) {
     setLineQty(1);
     setLinePrice((Number(vehicle.purchaseCents ?? 0) || 0) / 100);
     setLineDiscount(0);
-    setLineVatRate(19);
+    // Fahrzeugbestand wird typischerweise differenzbesteuert verkauft (MwSt. nicht ausweisbar)
+    setLineVatRate(0);
+    setLineIsMarginScheme(true);
     setLineDescription(vehicle.vin ? `VIN: ${vehicle.vin}` : "");
   }
 
   function addPositionLine() {
+    if (isLocked) return;
     const title = itemQuery.trim() || "Freitext";
     if (!itemQuery.trim() && !lineDescription.trim()) return;
     startTransition(async () => {
@@ -241,6 +410,7 @@ export default function EditorClient({ doc }: { doc: any }) {
         unitPrice: linePrice,
         discount: lineDiscount,
         vatRate: lineVatRate,
+        isMarginScheme: lineIsMarginScheme,
       });
       setRefreshKey((k) => k + 1);
       router.refresh();
@@ -251,12 +421,14 @@ export default function EditorClient({ doc }: { doc: any }) {
       setLinePrice(0);
       setLineDiscount(0);
       setLineVatRate(19);
+      setLineIsMarginScheme(false);
       setSelectedItem(null);
       setShowItemResults(false);
     });
   }
 
   function removeLine(lineId: string) {
+    if (isLocked) return;
     startTransition(async () => {
       await deleteDocumentLine(lineId);
       setRefreshKey((k) => k + 1);
@@ -266,6 +438,7 @@ export default function EditorClient({ doc }: { doc: any }) {
   }
 
   function moveLine(lineId: string, direction: "up" | "down") {
+    if (isLocked) return;
     startTransition(async () => {
       await moveDocumentLine({ documentId: doc.id, lineId, direction });
       setRefreshKey((k) => k + 1);
@@ -277,7 +450,7 @@ export default function EditorClient({ doc }: { doc: any }) {
     <div className="grid grid-cols-[1fr_520px] gap-4">
       {/* LINKS: Wizard */}
       <div className="space-y-4">
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="text-sm text-slate-400">Dokument</div>
@@ -285,34 +458,57 @@ export default function EditorClient({ doc }: { doc: any }) {
                 {doc.docType === "INVOICE"
                   ? "Rechnung"
                   : doc.docType === "OFFER"
-                    ? "Angebot"
+                    ? doc.offerType === "ESTIMATE"
+                      ? "Kostenvoranschlag"
+                      : "Angebot"
                     : doc.docType === "CREDIT_NOTE"
                       ? "Gutschrift"
-                      : "Kaufvertrag"}{" "}
+                    : doc.docType === "STORNO"
+                      ? "Storno"
+                      : "Auftrag"}{" "}
                 — {formatDocLabel(doc)}
               </div>
             </div>
 
-            <label className="flex items-center gap-3 text-sm text-slate-300">
-              <span>Entwurf</span>
-              <span className="relative inline-flex h-6 w-11 items-center">
-                <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={doc.isFinal}
-                  onChange={() => toggleFinal()}
-                  disabled={isPending}
-                />
-                <span className="h-6 w-11 rounded-full bg-slate-700 transition peer-checked:bg-emerald-600 peer-disabled:opacity-50" />
-                <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-5" />
-              </span>
-              <span>Final</span>
-            </label>
+            {doc.docType === "INVOICE" ? (
+              <div className="flex items-center gap-2 text-sm">
+                {doc.isFinal ? (
+                  <span className="rounded bg-cyan-700/20 px-3 py-1 text-cyan-300">
+                    Final gespeichert
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={finalizeNow}
+                    disabled={isPending}
+                    className="rounded bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
+                  >
+                    Rechnung final speichern
+                  </button>
+                )}
+              </div>
+            ) : (
+              <label className="flex items-center gap-3 text-sm text-slate-300">
+                <span>Entwurf</span>
+                <span className="relative inline-flex h-6 w-11 items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={doc.isFinal}
+                    onChange={() => toggleFinal()}
+                    disabled={isPending || isLocked}
+                  />
+                  <span className="h-6 w-11 rounded-full bg-slate-700 transition peer-checked:bg-cyan-600 peer-disabled:opacity-50" />
+                  <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-5" />
+                </span>
+                <span>Final</span>
+              </label>
+            )}
           </div>
         </div>
 
         {/* Schritt 1 */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/60">
           <button
             type="button"
             onClick={() => setStep(1)}
@@ -327,31 +523,125 @@ export default function EditorClient({ doc }: { doc: any }) {
               <form action={saveBasics} className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm text-slate-300">Dokumentnummer</label>
+                    <label className="block text-sm text-slate-300">
+                      {doc.docType === "OFFER"
+                        ? doc.offerType === "ESTIMATE"
+                          ? "Kostenvoranschlagsnummer"
+                          : "Angebotsnummer"
+                        : doc.docType === "PURCHASE_CONTRACT"
+                          ? "Auftragsnummer"
+                          : "Dokumentnummer"}
+                    </label>
                     <input
                       value={formatDocNumber(doc)}
                       disabled
-                      className="w-full rounded bg-slate-950 p-2 text-slate-400"
+                      className="w-full rounded bg-slate-800 p-2 text-slate-300"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-slate-300">Rechnungsdatum</label>
+                    <label className="block text-sm text-slate-300">
+                      {doc.docType === "INVOICE" ? "Rechnungsdatum" : "Erstelldatum"}
+                    </label>
                     <input
                       type="date"
                       name="issueDate"
-                      defaultValue={toInputDate(doc.issueDate)}
-                      className="w-full rounded bg-slate-950 p-2"
+                      value={issueDateInput}
+                      disabled={isLocked || isPending}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setIssueDateInput(value);
+                        if (doc.docType === "INVOICE" && dueDateAuto) {
+                          setDueDateInput(addDaysToInputDate(value, 10));
+                        }
+                        if (doc.docType === "INVOICE" && serviceDateAuto) {
+                          setServiceDateInput(value);
+                        }
+                        if (doc.docType === "OFFER" && validUntilAuto) {
+                          setValidUntilInput(addDaysToInputDate(value, 10));
+                        }
+                        if (doc.docType === "PURCHASE_CONTRACT" && deliveryDateAuto) {
+                          setDeliveryDateInput(addDaysToInputDate(value, 7));
+                        }
+                      }}
+                      className="w-full rounded bg-slate-800 p-2"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm text-slate-300">Fällig am</label>
-                    <input
-                      type="date"
-                      name="dueDate"
-                      defaultValue={toInputDate(doc.dueDate)}
-                      className="w-full rounded bg-slate-950 p-2"
-                    />
-                  </div>
+                  {doc.docType === "OFFER" ? (
+                    <div>
+                      <label className="block text-sm text-slate-300">Dokumenttyp</label>
+                      <select
+                        name="offerType"
+                        defaultValue={doc.offerType ?? "OFFER"}
+                        disabled={isLocked || isPending}
+                        className="w-full rounded bg-slate-800 p-2 text-slate-200"
+                      >
+                        <option value="OFFER">Angebot</option>
+                        <option value="ESTIMATE">Kostenvoranschlag</option>
+                      </select>
+                    </div>
+                  ) : null}
+                  {doc.docType === "OFFER" ? (
+                    <div>
+                      <label className="block text-sm text-slate-300">Gültig bis</label>
+                      <input
+                        type="date"
+                        name="validUntil"
+                        value={validUntilInput}
+                        disabled={isLocked || isPending}
+                        onChange={(e) => {
+                          setValidUntilInput(e.target.value);
+                          setValidUntilAuto(false);
+                        }}
+                        className="w-full rounded bg-slate-800 p-2"
+                      />
+                    </div>
+                  ) : doc.docType === "PURCHASE_CONTRACT" ? (
+                    <div>
+                      <label className="block text-sm text-slate-300">Lieferdatum</label>
+                      <input
+                        type="date"
+                        name="deliveryDate"
+                        value={deliveryDateInput}
+                        disabled={isLocked || isPending}
+                        onChange={(e) => {
+                          setDeliveryDateInput(e.target.value);
+                          setDeliveryDateAuto(false);
+                        }}
+                        className="w-full rounded bg-slate-800 p-2"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm text-slate-300">Fällig am</label>
+                      <input
+                        type="date"
+                        name="dueDate"
+                        value={dueDateInput}
+                        disabled={isLocked || isPending}
+                        onChange={(e) => {
+                          setDueDateInput(e.target.value);
+                          setDueDateAuto(false);
+                        }}
+                        className="w-full rounded bg-slate-800 p-2"
+                      />
+                    </div>
+                  )}
+                  {doc.docType === "INVOICE" ? (
+                    <div>
+                      <label className="block text-sm text-slate-300">Leistungsdatum</label>
+                      <input
+                        type="date"
+                        name="serviceDate"
+                        value={serviceDateInput}
+                        disabled={isLocked || isPending}
+                        onChange={(e) => {
+                          setServiceDateInput(e.target.value);
+                          setServiceDateAuto(false);
+                        }}
+                        className="w-full rounded bg-slate-800 p-2"
+                      />
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>
@@ -359,7 +649,8 @@ export default function EditorClient({ doc }: { doc: any }) {
                   <textarea
                     name="notesPublic"
                     defaultValue={doc.notesPublic ?? ""}
-                    className="w-full rounded bg-slate-950 p-2"
+                    disabled={isLocked || isPending}
+                    className="w-full rounded bg-slate-800 p-2"
                   />
                 </div>
 
@@ -368,14 +659,15 @@ export default function EditorClient({ doc }: { doc: any }) {
                   <textarea
                     name="notesInternal"
                     defaultValue={doc.notesInternal ?? ""}
-                    className="w-full rounded bg-slate-950 p-2"
+                    disabled={isLocked || isPending}
+                    className="w-full rounded bg-slate-800 p-2"
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <button
                     type="submit"
-                    disabled={isPending}
+                    disabled={isPending || isLocked}
                     className="rounded bg-slate-800 px-3 py-2 hover:bg-slate-700 disabled:opacity-50"
                   >
                     Speichern
@@ -383,7 +675,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                   <button
                     type="button"
                     onClick={() => setStep(2)}
-                    className="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600"
+                    className="rounded bg-cyan-700 px-4 py-2 text-sm hover:bg-cyan-600"
                   >
                     Weiter
                   </button>
@@ -398,6 +690,7 @@ export default function EditorClient({ doc }: { doc: any }) {
           documentId={doc.id}
           currentCustomer={doc.customer}
           currentVehicle={doc.vehicle}
+          locked={isLocked}
           onChanged={() => {
             setRefreshKey((k) => k + 1);
             router.refresh();
@@ -409,7 +702,7 @@ export default function EditorClient({ doc }: { doc: any }) {
         />
 
         {/* Schritt 3: Dienstleistungen */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/60">
           <button
             type="button"
             onClick={() => setStep(3)}
@@ -421,7 +714,12 @@ export default function EditorClient({ doc }: { doc: any }) {
 
           {step === 3 && (
             <div className="p-4 space-y-4">
-              <div className="rounded border border-slate-800 bg-slate-950 p-3">
+              {isLocked && (
+                <div className="rounded border border-amber-700/40 bg-amber-900/20 p-3 text-sm text-amber-200">
+                  Diese Rechnung ist bezahlt oder storniert und kann nicht mehr bearbeitet werden.
+                </div>
+              )}
+              <div className="rounded border border-slate-700 bg-slate-800 p-3">
                 <div className="mb-3 text-sm font-semibold text-slate-300">Position</div>
                 <div className="grid grid-cols-[1fr_340px] gap-4">
                   <div className="space-y-3">
@@ -437,12 +735,14 @@ export default function EditorClient({ doc }: { doc: any }) {
                             setShowItemResults(value.trim().length > 0);
                           }}
                           placeholder="Suche"
+                          disabled={isLocked || isPending}
                           className="w-full rounded bg-slate-900 p-2 text-sm"
                         />
                         <button
                           type="button"
                           className="rounded bg-cyan-600 px-3 py-2 text-sm text-white"
                           onClick={() => setShowItemResults((v) => !v)}
+                          disabled={isLocked || isPending}
                         >
                           ≡
                         </button>
@@ -466,7 +766,8 @@ export default function EditorClient({ doc }: { doc: any }) {
                                   key={s.id}
                                   type="button"
                                   onClick={() => selectService(s)}
-                                  className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-800/70"
+                                  disabled={isLocked || isPending}
+                                  className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-800/70 disabled:opacity-50"
                                 >
                                   <div>
                                     <div className="font-semibold text-slate-100">{s.name}</div>
@@ -485,7 +786,8 @@ export default function EditorClient({ doc }: { doc: any }) {
                                 key={v.id}
                                 type="button"
                                 onClick={() => selectStockVehicle(v)}
-                                className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-800/70"
+                                disabled={isLocked || isPending}
+                                className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-800/70 disabled:opacity-50"
                               >
                                 <div>
                                   <div className="font-semibold text-slate-100">
@@ -506,6 +808,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                       <textarea
                         value={lineDescription}
                         onChange={(e) => setLineDescription(e.target.value)}
+                        disabled={isLocked || isPending}
                         className="h-24 w-full rounded bg-slate-900 p-2 text-sm"
                       />
                     </div>
@@ -520,9 +823,11 @@ export default function EditorClient({ doc }: { doc: any }) {
                           setLinePrice(0);
                           setLineDiscount(0);
                           setLineVatRate(19);
+                          setLineIsMarginScheme(false);
                           setSelectedItem(null);
                           setShowItemResults(false);
                         }}
+                        disabled={isLocked || isPending}
                         className="rounded bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
                       >
                         Abbrechen
@@ -530,8 +835,8 @@ export default function EditorClient({ doc }: { doc: any }) {
                       <button
                         type="button"
                         onClick={addPositionLine}
-                        disabled={!itemQuery.trim() && !lineDescription.trim()}
-                        className="rounded bg-emerald-700 px-4 py-2 text-sm disabled:opacity-50"
+                        disabled={isLocked || isPending || (!itemQuery.trim() && !lineDescription.trim())}
+                        className="rounded bg-cyan-700 px-4 py-2 text-sm disabled:opacity-50"
                       >
                         Hinzufügen
                       </button>
@@ -545,6 +850,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                         <button
                           type="button"
                           onClick={() => setLineQty((q) => Math.max(1, q - 1))}
+                          disabled={isLocked || isPending}
                           className="h-9 w-9 rounded bg-slate-800 text-lg hover:bg-slate-700"
                         >
                           -
@@ -554,11 +860,13 @@ export default function EditorClient({ doc }: { doc: any }) {
                           value={lineQty}
                           min={1}
                           onChange={(e) => setLineQty(Number(e.target.value) || 1)}
+                          disabled={isLocked || isPending}
                           className="w-20 rounded bg-slate-900 p-2 text-center text-sm"
                         />
                         <button
                           type="button"
                           onClick={() => setLineQty((q) => q + 1)}
+                          disabled={isLocked || isPending}
                           className="h-9 w-9 rounded bg-slate-800 text-lg hover:bg-slate-700"
                         >
                           +
@@ -567,7 +875,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                     </div>
 
                     <div>
-                      <label className="block text-xs text-slate-300">Preis</label>
+                      <label className="block text-xs text-slate-300">Preis (brutto)</label>
                       <div className="flex items-center gap-2">
                         <span className="rounded bg-slate-800 px-2 py-2 text-sm text-slate-300">€</span>
                         <input
@@ -575,9 +883,45 @@ export default function EditorClient({ doc }: { doc: any }) {
                           step="0.01"
                           value={linePrice}
                           onChange={(e) => setLinePrice(Number(e.target.value) || 0)}
+                          disabled={isLocked || isPending}
                           className="w-full rounded bg-slate-900 p-2 text-sm"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-300">MwSt.</label>
+                      <select
+                        value={lineIsMarginScheme ? "MARGIN" : String(lineVatRate)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === "MARGIN") {
+                            setLineVatRate(0);
+                            setLineIsMarginScheme(true);
+                            return;
+                          }
+
+                          const rate = Number(value);
+                          setLineVatRate(rate === 7 ? 7 : rate === 0 ? 0 : 19);
+                          setLineIsMarginScheme(false);
+                        }}
+                        disabled={isLocked || isPending}
+                        className="w-full rounded bg-slate-900 p-2 text-sm"
+                      >
+                        <option value="19">19%</option>
+                        <option value="7">7%</option>
+                        <option value="0">0% (Weiterberechnung)</option>
+                        <option value="MARGIN">Differenzbesteuert (§25a)</option>
+                      </select>
+                      {lineIsMarginScheme ? (
+                        <div className="mt-1 text-[11px] text-slate-400">
+                          Hinweis: Differenzbesteuerung gem. §25a UStG (kein gesonderter MwSt.-Ausweis).
+                        </div>
+                      ) : lineVatRate === 0 ? (
+                        <div className="mt-1 text-[11px] text-slate-400">
+                          Hinweis: 0% Weiterberechnung (z.B. TÜV-Gebühr) – keine MwSt.
+                        </div>
+                      ) : null}
                     </div>
 
                     <div>
@@ -593,6 +937,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                         max={100}
                         value={lineDiscount}
                         onChange={(e) => setLineDiscount(Number(e.target.value))}
+                        disabled={isLocked || isPending}
                         className="w-full accent-cyan-400"
                       />
                     </div>
@@ -604,22 +949,31 @@ export default function EditorClient({ doc }: { doc: any }) {
               <div>
                 <div className="mb-2 text-sm text-slate-300">Positionen</div>
                 {!doc.lines || doc.lines.length === 0 ? (
-                  <div className="rounded border border-slate-800 bg-slate-950 p-3 text-sm text-slate-400">
+                  <div className="rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-300">
                     Keine Positionen hinzugefügt
                   </div>
                 ) : (
-                  <div className="space-y-2 rounded border border-slate-800 bg-slate-950 p-3">
+                  <div className="space-y-2 rounded border border-slate-700 bg-slate-800 p-3">
                     {doc.lines.map((line: any, idx: number) => {
                       const qty = Number(line.quantity ?? 0);
-                      const unit = Number(line.unitPrice ?? 0);
-                      const total = qty * unit;
+                      const unitNet = Number(line.unitPrice ?? 0);
+                      const vatRate = Number(line.vatRate ?? 19);
+                      const isMarginScheme = Boolean(line.isMarginScheme);
+                      const unitGross =
+                        isMarginScheme || vatRate === 0 ? unitNet : unitNet * (1 + vatRate / 100);
+                      const totalGross = Number(line.lineGross ?? qty * unitGross);
+                      const taxLabel = isMarginScheme
+                        ? "Differenz (§25a)"
+                        : vatRate === 0
+                          ? "0% (Weiterberechnung)"
+                          : `${vatRate}%`;
 
                       return (
                         <div
                           key={line.id}
                           className={`flex w-full items-start justify-between gap-2 rounded p-2 text-left transition ${
                             activeLineId === line.id
-                              ? "bg-slate-800 ring-1 ring-emerald-500"
+                              ? "bg-slate-800 ring-1 ring-cyan-500"
                               : "hover:bg-slate-800"
                           }`}
                         >
@@ -632,7 +986,8 @@ export default function EditorClient({ doc }: { doc: any }) {
                               {line.title || line.description || "Ohne Name"}
                             </div>
                             <div className="text-xs text-slate-400">
-                              {qty} x {unit.toFixed(2)} € = {total.toFixed(2)} €
+                              {qty} x {unitGross.toFixed(2)} € = {totalGross.toFixed(2)} € • Steuer:{" "}
+                              {taxLabel}
                             </div>
                           </button>
 
@@ -640,7 +995,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                             <button
                               type="button"
                               onClick={() => moveLine(line.id, "up")}
-                              disabled={isPending || idx === 0}
+                              disabled={isPending || isLocked || idx === 0}
                               className="rounded bg-slate-700 px-2 py-1 text-xs disabled:opacity-40"
                             >
                               ↑
@@ -648,7 +1003,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                             <button
                               type="button"
                               onClick={() => moveLine(line.id, "down")}
-                              disabled={isPending || idx === doc.lines.length - 1}
+                              disabled={isPending || isLocked || idx === doc.lines.length - 1}
                               className="rounded bg-slate-700 px-2 py-1 text-xs disabled:opacity-40"
                             >
                               ↓
@@ -656,7 +1011,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                             <button
                               type="button"
                               onClick={() => removeLine(line.id)}
-                              disabled={isPending}
+                              disabled={isPending || isLocked}
                               className="rounded bg-rose-700 px-2 py-1 text-xs disabled:opacity-50"
                             >
                               Löschen
@@ -680,7 +1035,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                 <button
                   type="button"
                   onClick={() => setStep(4)}
-                  className="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600"
+                  className="rounded bg-cyan-700 px-4 py-2 text-sm hover:bg-cyan-600"
                 >
                   Weiter
                 </button>
@@ -689,7 +1044,7 @@ export default function EditorClient({ doc }: { doc: any }) {
           )}
         </div>
 
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/60">
           <button
             type="button"
             onClick={() => setStep(4)}
@@ -701,7 +1056,7 @@ export default function EditorClient({ doc }: { doc: any }) {
           {step === 4 && (
             <div className="p-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded border border-slate-800 bg-slate-950 p-3">
+                <div className="rounded border border-slate-700 bg-slate-800 p-3">
                   <div className="text-sm font-semibold text-slate-300">Aktionen</div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <a
@@ -713,50 +1068,39 @@ export default function EditorClient({ doc }: { doc: any }) {
                       PDF öffnen
                     </a>
 
-                    {!doc.isFinal && (
+                    {!isLocked && (
                       <button
-                        onClick={deleteDraft}
+                        onClick={deleteThisDocument}
                         disabled={isPending}
                         className="rounded bg-rose-700 px-3 py-2 text-sm disabled:opacity-50"
                         type="button"
                       >
-                        Entwurf löschen
+                        {docLabel} löschen
                       </button>
                     )}
                   </div>
                 </div>
 
                 {doc.docType === "INVOICE" && (
-                  <div className="rounded border border-slate-800 bg-slate-950 p-3">
+                  <div className="rounded border border-slate-700 bg-slate-800 p-3">
                     <div className="text-sm font-semibold text-slate-300">Bezahlung</div>
                     <div className="mt-3 grid grid-cols-[160px_1fr] gap-2">
                       <input
                         type="date"
                         value={paidAtInput}
                         onChange={(e) => setPaidAtInput(e.target.value)}
-                        disabled={!doc.isFinal || isPending}
+                        disabled={!doc.isFinal || isPending || doc.status === "CANCELLED"}
                         className="w-full rounded bg-slate-900 p-2 text-sm"
                       />
                       <div className="flex gap-2">
-                        {doc.status === "PAID" ? (
-                          <button
-                            onClick={markUnpaid}
-                            disabled={!doc.isFinal || isPending}
-                            className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
-                            type="button"
-                          >
-                            Zahlung entfernen
-                          </button>
-                        ) : (
-                          <button
-                            onClick={markPaid}
-                            disabled={!doc.isFinal || isPending || !paidAtInput}
-                            className="rounded bg-emerald-700 px-3 py-2 text-sm disabled:opacity-50"
-                            type="button"
-                          >
-                            Als bezahlt markieren
-                          </button>
-                        )}
+                        <button
+                          onClick={markPaid}
+                          disabled={!doc.isFinal || isPending || doc.status === "CANCELLED" || !paidAtInput}
+                          className="rounded bg-cyan-700 px-3 py-2 text-sm disabled:opacity-50"
+                          type="button"
+                        >
+                          {doc.status === "PAID" ? "Zahlungsdatum speichern" : "Als bezahlt markieren"}
+                        </button>
                       </div>
                     </div>
                     {!doc.isFinal && (
@@ -767,31 +1111,47 @@ export default function EditorClient({ doc }: { doc: any }) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+        </div>
 
-              {doc.docType === "INVOICE" && doc.isFinal && (
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded border border-slate-800 bg-slate-950 p-3">
-                    <div className="text-sm font-semibold text-slate-300">Storno</div>
+        {doc.docType === "INVOICE" && doc.status === "PAID" && (
+          <div className="rounded-lg border border-slate-700 bg-slate-800/60">
+            <button
+              type="button"
+              onClick={() => setStep(5)}
+              className="flex w-full items-center justify-between border-b border-slate-800 px-4 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-900/60"
+            >
+              <span>Storno &amp; Gutschriften</span>
+              <span className="text-xs text-slate-400">Nur bei bezahlten Rechnungen</span>
+            </button>
+
+            {step === 5 && (
+              <div className="p-4 space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded border border-slate-700 bg-slate-800 p-3">
+                    <div className="text-sm font-semibold text-slate-300">Storno‑Beleg</div>
                     <div className="mt-1 text-xs text-slate-500">
-                      Storniert die Rechnung. Das Dokument bleibt erhalten.
+                      Storno bedeutet: komplette Rechnung. Erstellt einen Storno‑Beleg (PDF) und
+                      storniert die Originalrechnung.
                     </div>
                     <button
-                      onClick={cancelInvoice}
-                      disabled={isPending || doc.status === "CANCELLED"}
+                      onClick={createStorno}
+                      disabled={isPending || (doc.lines ?? []).length === 0}
                       className="mt-3 rounded bg-rose-700 px-3 py-2 text-sm disabled:opacity-50"
                       type="button"
                     >
-                      {doc.status === "CANCELLED" ? "Bereits storniert" : "Rechnung stornieren"}
+                      Storno‑Beleg erstellen
                     </button>
                   </div>
 
-                  <div className="rounded border border-slate-800 bg-slate-950 p-3">
-                    <div className="text-sm font-semibold text-slate-300">Gutschrift</div>
+                  <div className="rounded border border-slate-700 bg-slate-800 p-3">
+                    <div className="text-sm font-semibold text-slate-300">Gutschrift (Teil‑)</div>
                     <div className="mt-1 text-xs text-slate-500">
-                      Wähle Positionen für eine (Teil‑)Gutschrift.
+                      Wähle einzelne Positionen (und Menge) für eine Gutschrift.
                     </div>
 
-                    <div className="mt-3 max-h-40 space-y-2 overflow-auto rounded border border-slate-800 p-2">
+                    <div className="mt-3 max-h-56 space-y-2 overflow-auto rounded border border-slate-800 p-2">
                       {(doc.lines ?? []).map((line: any) => {
                         const entry = creditSelection[line.id];
                         const maxQty = Number(line.quantity ?? 0);
@@ -804,6 +1164,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                               <input
                                 type="checkbox"
                                 checked={entry?.selected ?? false}
+                                disabled={isPending}
                                 onChange={(e) =>
                                   setCreditSelection((prev) => ({
                                     ...prev,
@@ -823,6 +1184,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                               min={0}
                               max={maxQty}
                               step="0.01"
+                              disabled={isPending}
                               value={entry?.qty ?? maxQty}
                               onChange={(e) =>
                                 setCreditSelection((prev) => ({
@@ -844,7 +1206,8 @@ export default function EditorClient({ doc }: { doc: any }) {
                       onClick={createCreditNote}
                       disabled={
                         isPending ||
-                        Object.values(creditSelection).filter((v) => v.selected && v.qty > 0).length === 0
+                        Object.values(creditSelection).filter((v) => v.selected && v.qty > 0).length ===
+                          0
                       }
                       className="mt-3 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
                       type="button"
@@ -853,14 +1216,24 @@ export default function EditorClient({ doc }: { doc: any }) {
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(4)}
+                    className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                  >
+                    Zurück
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* RECHTS: PDF Vorschau */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-2">
+      <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-2">
         <div className="mb-2 flex items-center justify-between px-2">
           <div className="font-semibold">Vorschau</div>
 
@@ -890,6 +1263,7 @@ function Step2CustomerVehicle({
   documentId,
   currentCustomer,
   currentVehicle,
+  locked,
   onChanged,
   active,
   onOpen,
@@ -899,6 +1273,7 @@ function Step2CustomerVehicle({
   documentId: string;
   currentCustomer: any;
   currentVehicle: any;
+  locked: boolean;
   onChanged: () => void;
   active: boolean;
   onOpen: () => void;
@@ -906,55 +1281,83 @@ function Step2CustomerVehicle({
   onPrev: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const disabled = locked || isPending;
 
   // Kunde
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<any[]>([]);
+  const [showCustomerResults, setShowCustomerResults] = useState(false);
   const [showCustomerCreate, setShowCustomerCreate] = useState(false);
   const [customerIsBusiness, setCustomerIsBusiness] = useState(false);
 
   // Fahrzeug
   const [vehicleQuery, setVehicleQuery] = useState("");
   const [vehicleResults, setVehicleResults] = useState<any[]>([]);
+  const [showVehicleResults, setShowVehicleResults] = useState(false);
   const [showVehicleCreate, setShowVehicleCreate] = useState(false);
 
   // Kunden suchen (debounced light)
   useEffect(() => {
-    const q = customerQuery.trim();
-    if (!q) {
-      setCustomerResults([]);
+    if (!showCustomerResults) return;
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const res = await searchCustomers(customerQuery.trim());
+      if (cancelled) return;
+      setCustomerResults(res);
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [customerQuery, showCustomerResults]);
+
+  // Wenn ein Kunde gewählt ist: Name im Suchfeld anzeigen
+  useEffect(() => {
+    if (!currentCustomer) {
+      setCustomerQuery("");
       return;
     }
 
-    const t = setTimeout(() => {
-      startTransition(async () => {
-        const res = await searchCustomers(q);
-        setCustomerResults(res);
-      });
-    }, 200);
-
-    return () => clearTimeout(t);
-  }, [customerQuery]);
+    const label =
+      currentCustomer.name || (currentCustomer.isBusiness ? "Gewerbekunde" : "Ohne Name");
+    setCustomerQuery(label);
+  }, [currentCustomer?.id]);
 
   // Fahrzeuge suchen
   useEffect(() => {
-    const q = vehicleQuery.trim();
-    if (!q) {
-      setVehicleResults([]);
+    if (!showVehicleResults) return;
+    if (!currentCustomer) return;
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const res = await searchVehicles(vehicleQuery.trim(), currentCustomer?.id ?? null);
+      if (cancelled) return;
+      setVehicleResults(res);
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [vehicleQuery, currentCustomer?.id, showVehicleResults]);
+
+  // Wenn ein Fahrzeug gewählt ist: Anzeige im Suchfeld
+  useEffect(() => {
+    if (!currentVehicle) {
+      setVehicleQuery("");
       return;
     }
 
-    const t = setTimeout(() => {
-      startTransition(async () => {
-        const res = await searchVehicles(q, currentCustomer?.id ?? null);
-        setVehicleResults(res);
-      });
-    }, 200);
-
-    return () => clearTimeout(t);
-  }, [vehicleQuery, currentCustomer?.id]);
+    const makeModel = `${currentVehicle.make ?? ""} ${currentVehicle.model ?? ""}`.trim();
+    const label = makeModel || (currentVehicle.vin ? `VIN: ${currentVehicle.vin}` : "Fahrzeug");
+    setVehicleQuery(label);
+  }, [currentVehicle?.id]);
 
   function pickCustomer(id: string) {
+    if (locked) return;
+    setShowCustomerResults(false);
     startTransition(async () => {
       await setDocumentCustomer(documentId, id);
       onChanged();
@@ -962,6 +1365,9 @@ function Step2CustomerVehicle({
   }
 
   function clearCustomer() {
+    if (locked) return;
+    setShowCustomerResults(false);
+    setCustomerQuery("");
     startTransition(async () => {
       await setDocumentCustomer(documentId, null);
       onChanged();
@@ -969,6 +1375,8 @@ function Step2CustomerVehicle({
   }
 
   function pickVehicle(id: string) {
+    if (locked) return;
+    setShowVehicleResults(false);
     startTransition(async () => {
       await setDocumentVehicle(documentId, id);
       onChanged();
@@ -976,6 +1384,9 @@ function Step2CustomerVehicle({
   }
 
   function clearVehicle() {
+    if (locked) return;
+    setShowVehicleResults(false);
+    setVehicleQuery("");
     startTransition(async () => {
       await setDocumentVehicle(documentId, null);
       onChanged();
@@ -983,6 +1394,7 @@ function Step2CustomerVehicle({
   }
 
   async function submitNewCustomer(formData: FormData) {
+    if (locked) return;
     const isBusiness = String(formData.get("isBusiness") ?? "") === "on";
     const name = String(formData.get("name") ?? "").trim();
     const street = String(formData.get("street") ?? "").trim() || null;
@@ -1012,6 +1424,7 @@ function Step2CustomerVehicle({
   }
 
   async function submitNewVehicle(formData: FormData) {
+    if (locked) return;
     const make = String(formData.get("make") ?? "").trim() || null;
     const model = String(formData.get("model") ?? "").trim() || null;
     const vin = String(formData.get("vin") ?? "").trim() || null;
@@ -1039,7 +1452,7 @@ function Step2CustomerVehicle({
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40">
+    <div className="rounded-lg border border-slate-700 bg-slate-800/60">
       <button
         type="button"
         onClick={onOpen}
@@ -1055,34 +1468,52 @@ function Step2CustomerVehicle({
 
       {active && (
         <div className="p-4 space-y-4">
+          {locked && (
+            <div className="rounded border border-amber-700/40 bg-amber-900/20 p-3 text-sm text-amber-200">
+              Diese Rechnung ist bezahlt oder storniert und kann nicht mehr bearbeitet werden.
+            </div>
+          )}
           <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-4">
             <div>
               <div className="mb-2 text-sm text-slate-300">Suche nach Kunden</div>
               <div className="flex gap-2">
                 <input
                   value={customerQuery}
-                  onChange={(e) => setCustomerQuery(e.target.value)}
+                  onChange={(e) => {
+                    setCustomerQuery(e.target.value);
+                    setShowCustomerResults(true);
+                  }}
                   placeholder="Suche"
-                  className="w-full rounded bg-slate-950 p-2"
+                  disabled={disabled}
+                  className="w-full rounded bg-slate-800 p-2"
                 />
                 <button
                   type="button"
                   className="rounded bg-cyan-600 px-3 py-2 text-sm text-white"
+                  onClick={() => setShowCustomerResults((v) => !v)}
+                  disabled={disabled}
                 >
                   ≡
                 </button>
               </div>
 
-              <div className="mt-2 max-h-40 overflow-auto rounded border border-slate-800">
+              <div
+                className={`mt-2 max-h-40 overflow-auto rounded border border-slate-800 bg-slate-900 ${
+                  showCustomerResults ? "" : "hidden"
+                }`}
+              >
                 {customerResults.length === 0 ? (
-                  <div className="p-3 text-sm text-slate-500">Keine Treffer</div>
+                  <div className="p-3 text-sm text-slate-500">
+                    {customerQuery.trim() ? "Keine Treffer" : "Vorschläge werden geladen…"}
+                  </div>
                 ) : (
                   customerResults.map((c) => (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => pickCustomer(c.id)}
-                      className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-900"
+                      disabled={disabled}
+                      className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-900 disabled:opacity-50"
                     >
                       <div>
                         <div className="font-semibold text-slate-100">
@@ -1102,7 +1533,7 @@ function Step2CustomerVehicle({
                 <button
                   type="button"
                   onClick={clearCustomer}
-                  disabled={isPending}
+                  disabled={disabled}
                   className="mt-2 rounded bg-rose-700 px-3 py-1 text-xs disabled:opacity-50"
                 >
                   Kunde entfernen
@@ -1121,6 +1552,7 @@ function Step2CustomerVehicle({
                     className="peer sr-only"
                     checked={showCustomerCreate}
                     onChange={(e) => setShowCustomerCreate(e.target.checked)}
+                    disabled={disabled}
                   />
                   <span className="h-6 w-11 rounded-full bg-slate-700 transition peer-checked:bg-cyan-600" />
                   <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-5" />
@@ -1140,6 +1572,7 @@ function Step2CustomerVehicle({
                     className="peer sr-only"
                     checked={customerIsBusiness}
                     onChange={(e) => setCustomerIsBusiness(e.target.checked)}
+                    disabled={disabled}
                   />
                   <span className="h-6 w-11 rounded-full bg-slate-700 transition peer-checked:bg-cyan-600" />
                   <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-5" />
@@ -1149,19 +1582,40 @@ function Step2CustomerVehicle({
               <input
                 name="name"
                 placeholder={customerIsBusiness ? "Firma (optional)" : "Name *"}
+                disabled={disabled}
                 className="col-span-2 rounded bg-slate-900 p-2"
                 required={!customerIsBusiness}
               />
-              <input name="street" placeholder="Straße" className="col-span-2 rounded bg-slate-900 p-2" />
-              <input name="zip" placeholder="PLZ" className="rounded bg-slate-900 p-2" />
-              <input name="city" placeholder="Ort" className="rounded bg-slate-900 p-2" />
-              <input name="email" placeholder="E-Mail" className="rounded bg-slate-900 p-2" />
-              <input name="phone" placeholder="Telefon" className="rounded bg-slate-900 p-2" />
-              <input name="vatId" placeholder="USt-IdNr." className="col-span-2 rounded bg-slate-900 p-2" />
+              <input
+                name="street"
+                placeholder="Straße"
+                disabled={disabled}
+                className="col-span-2 rounded bg-slate-900 p-2"
+              />
+              <input name="zip" placeholder="PLZ" disabled={disabled} className="rounded bg-slate-900 p-2" />
+              <input name="city" placeholder="Ort" disabled={disabled} className="rounded bg-slate-900 p-2" />
+              <input
+                name="email"
+                placeholder="E-Mail"
+                disabled={disabled}
+                className="rounded bg-slate-900 p-2"
+              />
+              <input
+                name="phone"
+                placeholder="Telefon"
+                disabled={disabled}
+                className="rounded bg-slate-900 p-2"
+              />
+              <input
+                name="vatId"
+                placeholder="USt-IdNr."
+                disabled={disabled}
+                className="col-span-2 rounded bg-slate-900 p-2"
+              />
 
               <button
-                className="col-span-2 rounded bg-emerald-700 px-3 py-2 disabled:opacity-50"
-                disabled={isPending}
+                className="col-span-2 rounded bg-cyan-700 px-3 py-2 disabled:opacity-50"
+                disabled={disabled}
                 type="submit"
               >
                 Kunde speichern &amp; auswählen
@@ -1175,24 +1629,34 @@ function Step2CustomerVehicle({
               <div className="flex gap-2">
                 <input
                   value={vehicleQuery}
-                  onChange={(e) => setVehicleQuery(e.target.value)}
+                  onChange={(e) => {
+                    setVehicleQuery(e.target.value);
+                    setShowVehicleResults(true);
+                  }}
                   placeholder="Suche"
-                  className="w-full rounded bg-slate-950 p-2"
-                  disabled={!currentCustomer}
+                  className="w-full rounded bg-slate-800 p-2"
+                  disabled={disabled || !currentCustomer}
                 />
                 <button
                   type="button"
                   className="rounded bg-cyan-600 px-3 py-2 text-sm text-white"
-                  disabled={!currentCustomer}
+                  disabled={disabled || !currentCustomer}
+                  onClick={() => setShowVehicleResults((v) => !v)}
                 >
                   ≡
                 </button>
               </div>
 
-              <div className="mt-2 max-h-40 overflow-auto rounded border border-slate-800">
-                {vehicleResults.length === 0 ? (
+              <div
+                className={`mt-2 max-h-40 overflow-auto rounded border border-slate-800 bg-slate-900 ${
+                  showVehicleResults ? "" : "hidden"
+                }`}
+              >
+                {!currentCustomer ? (
+                  <div className="p-3 text-sm text-slate-500">Bitte zuerst Kunden auswählen</div>
+                ) : vehicleResults.length === 0 ? (
                   <div className="p-3 text-sm text-slate-500">
-                    {currentCustomer ? "Keine Treffer" : "Bitte zuerst Kunden auswählen"}
+                    {vehicleQuery.trim() ? "Keine Treffer" : "Vorschläge werden geladen…"}
                   </div>
                 ) : (
                   vehicleResults.map((v) => (
@@ -1200,7 +1664,8 @@ function Step2CustomerVehicle({
                       key={v.id}
                       type="button"
                       onClick={() => pickVehicle(v.id)}
-                      className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-900"
+                      disabled={disabled}
+                      className="flex w-full items-start justify-between gap-2 border-b border-slate-800 p-3 text-left hover:bg-slate-900 disabled:opacity-50"
                     >
                       <div>
                         <div className="font-semibold text-slate-100">
@@ -1219,7 +1684,7 @@ function Step2CustomerVehicle({
                 <button
                   type="button"
                   onClick={clearVehicle}
-                  disabled={isPending}
+                  disabled={disabled}
                   className="mt-2 rounded bg-rose-700 px-3 py-1 text-xs disabled:opacity-50"
                 >
                   Fahrzeug entfernen
@@ -1233,7 +1698,7 @@ function Step2CustomerVehicle({
               <button
                 type="button"
                 onClick={() => setShowVehicleCreate((v) => !v)}
-                disabled={!currentCustomer}
+                disabled={disabled || !currentCustomer}
                 className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
               >
                 {showVehicleCreate ? "Schließen" : "Neues Fahrzeug anlegen"}
@@ -1243,15 +1708,20 @@ function Step2CustomerVehicle({
 
           {showVehicleCreate && currentCustomer && (
             <form action={submitNewVehicle} className="grid grid-cols-2 gap-2">
-              <input name="make" placeholder="Marke" className="rounded bg-slate-900 p-2" />
-              <input name="model" placeholder="Modell" className="rounded bg-slate-900 p-2" />
-              <input name="vin" placeholder="VIN" className="col-span-2 rounded bg-slate-900 p-2" />
-              <input name="year" placeholder="Baujahr" className="rounded bg-slate-900 p-2" />
-              <input name="mileage" placeholder="KM" className="rounded bg-slate-900 p-2" />
+              <input name="make" placeholder="Marke" disabled={disabled} className="rounded bg-slate-900 p-2" />
+              <input name="model" placeholder="Modell" disabled={disabled} className="rounded bg-slate-900 p-2" />
+              <input
+                name="vin"
+                placeholder="VIN"
+                disabled={disabled}
+                className="col-span-2 rounded bg-slate-900 p-2"
+              />
+              <input name="year" placeholder="Baujahr" disabled={disabled} className="rounded bg-slate-900 p-2" />
+              <input name="mileage" placeholder="KM" disabled={disabled} className="rounded bg-slate-900 p-2" />
 
               <button
-                className="col-span-2 rounded bg-emerald-700 px-3 py-2 disabled:opacity-50"
-                disabled={isPending}
+                className="col-span-2 rounded bg-cyan-700 px-3 py-2 disabled:opacity-50"
+                disabled={disabled}
                 type="submit"
               >
                 Fahrzeug speichern &amp; auswählen
@@ -1270,7 +1740,7 @@ function Step2CustomerVehicle({
             <button
               type="button"
               onClick={onNext}
-              className="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600"
+              className="rounded bg-cyan-700 px-4 py-2 text-sm hover:bg-cyan-600"
             >
               Weiter
             </button>
@@ -1282,3 +1752,4 @@ function Step2CustomerVehicle({
     </div>
   );
 }
+

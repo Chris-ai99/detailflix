@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { centsToEuros } from "@/lib/money";
@@ -55,7 +55,7 @@ export default async function ServiceDetailPage({
         <div><span className="text-slate-400">MwSt:</span> {s.vatRate}%</div>
         <div>
           <span className="text-slate-400">Status:</span>{" "}
-          {s.active ? <span className="text-emerald-400">aktiv</span> : <span className="text-slate-400">inaktiv</span>}
+          {s.active ? <span className="text-cyan-400">aktiv</span> : <span className="text-slate-400">inaktiv</span>}
         </div>
       </div>
 

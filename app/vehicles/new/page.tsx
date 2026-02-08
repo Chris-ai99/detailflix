@@ -1,4 +1,4 @@
-// app/vehicles/new/page.tsx
+﻿// app/vehicles/new/page.tsx
 import Link from "next/link";
 import { createVehicle } from "./serverActions";
 
@@ -7,12 +7,15 @@ export default function NewVehiclePage() {
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Neues Fahrzeug</h1>
-        <Link className="rounded px-3 py-2 hover:bg-slate-800" href="/vehicles">
+        <Link className="rounded px-3 py-2 hover:bg-slate-700/60" href="/vehicles">
           Zurück
         </Link>
       </div>
 
-      <form action={createVehicle} className="space-y-4 rounded-lg border border-slate-800 bg-slate-900/40 p-6">
+      <form
+        action={createVehicle}
+        className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/60 p-6"
+      >
         <div className="grid grid-cols-2 gap-4">
           <Field label="VIN" name="vin" />
           <Field label="Baujahr" name="year" type="number" />
@@ -37,12 +40,12 @@ export default function NewVehiclePage() {
           <label className="mb-1 block text-sm text-slate-300">Notizen</label>
           <textarea
             name="notes"
-            className="w-full rounded border border-slate-700 bg-slate-950 p-2"
+            className="w-full rounded border border-slate-700 bg-slate-800 p-2"
             rows={4}
           />
         </div>
 
-        <button className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-700">
+        <button className="rounded bg-cyan-600 px-4 py-2 text-sm font-medium hover:bg-cyan-700">
           Speichern
         </button>
       </form>
@@ -65,8 +68,9 @@ function Field({
       <input
         name={name}
         type={type}
-        className="w-full rounded border border-slate-700 bg-slate-950 p-2"
+        className="w-full rounded border border-slate-700 bg-slate-800 p-2"
       />
     </div>
   );
 }
+

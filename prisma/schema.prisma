@@ -25,6 +25,30 @@ model Customer {
   vehicles  Vehicle[]
 }
 
+model CompanySettings {
+  // Single-row settings (per installation)
+  id String @id @default("default")
+
+  companyName String
+  ownerName   String?
+  street      String?
+  zip         String?
+  city        String?
+  phone       String?
+  email       String?
+  website     String?
+
+  bankName String?
+  iban     String?
+  bic      String?
+  vatId    String?
+
+  noticeRed   String?
+  logoDataUrl String?
+
+  updatedAt DateTime @updatedAt
+}
+
 model ServiceItem {
   id String @id @default(cuid())
 
@@ -93,15 +117,19 @@ model Document {
   id String @id @default(cuid())
 
   docType   DocumentType
+  offerType OfferType?
   docNumber String
   draftNumber String?
   status    DocumentStatus @default(DRAFT) // ✅ Enum ohne ""
   isFinal   Boolean        @default(false)
 
   issueDate  DateTime  @default(now())
+  serviceDate DateTime?
   dueDate    DateTime?
+  deliveryDate DateTime?
   validUntil DateTime?
   paidAt     DateTime?
+  sentAt     DateTime?
   cancelledAt DateTime?
 
   taxMode       TaxMode @default(REGULAR_VAT) // ✅ Enum ohne ""
@@ -112,6 +140,7 @@ model Document {
   customerId String?
   vehicleId  String?
   creditForId String?
+  sourceOfferId String?
 
   netTotalCents   Int @default(0)
   vatTotalCents   Int @default(0)
@@ -124,6 +153,8 @@ model Document {
   customer Customer? @relation(fields: [customerId], references: [id])
   creditFor Document? @relation("CreditFor", fields: [creditForId], references: [id])
   creditNotes Document[] @relation("CreditFor")
+  sourceOffer Document? @relation("SourceOffer", fields: [sourceOfferId], references: [id])
+  convertedInvoices Document[] @relation("SourceOffer")
 
   lines DocumentLine[]
 }
@@ -141,6 +172,7 @@ model DocumentLine {
   qty          Float  @default(1)
   unitNetCents Int    @default(0)
   vatRate      Int    @default(19)
+  isMarginScheme Boolean @default(false)
 
   // ✅ NEU (für Step 3 wie dein Screenshot)
   description String?
@@ -180,6 +212,12 @@ enum DocumentType {
   INVOICE
   PURCHASE_CONTRACT
   CREDIT_NOTE
+  STORNO
+}
+
+enum OfferType {
+  OFFER
+  ESTIMATE
 }
 
 enum DocumentStatus {

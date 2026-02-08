@@ -26,11 +26,11 @@ export default async function VehicleDetailPage({
           Fahrzeug: {v.make ?? "—"} {v.model ?? ""}
         </h1>
         <div className="flex gap-2">
-          <Link className="rounded px-3 py-2 hover:bg-slate-800" href="/vehicles">
+          <Link className="rounded px-3 py-2 hover:bg-slate-700/60" href="/vehicles">
             Zurück
           </Link>
           <Link
-            className="rounded bg-slate-800 px-3 py-2 hover:bg-slate-700"
+            className="rounded bg-slate-700 px-3 py-2 hover:bg-slate-600"
             href={`/vehicles/${v.id}/edit`}
           >
             Bearbeiten
@@ -39,7 +39,7 @@ export default async function VehicleDetailPage({
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-6">
+      <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-6">
         <dl className="grid grid-cols-2 gap-4 text-sm">
           <Item label="VIN" value={v.vin ?? "—"} />
           <Item label="Baujahr" value={v.year?.toString() ?? "—"} />
@@ -53,7 +53,7 @@ export default async function VehicleDetailPage({
         {v.notes && (
           <div className="mt-6">
             <div className="mb-1 text-sm text-slate-300">Notizen</div>
-            <div className="rounded border border-slate-800 bg-slate-950 p-3 text-slate-200">
+            <div className="rounded border border-slate-700 bg-slate-800 p-3 text-slate-200">
               {v.notes}
             </div>
           </div>

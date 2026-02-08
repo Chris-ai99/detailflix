@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { updateService } from "./serverActions";
 import { centsToEuros } from "@/lib/money";
@@ -76,7 +76,7 @@ export default async function EditServicePage({
           aktiv
         </label>
 
-        <button className="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded">
+        <button className="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded">
           Speichern
         </button>
       </form>
