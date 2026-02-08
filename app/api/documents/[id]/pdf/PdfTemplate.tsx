@@ -11,6 +11,8 @@ import {
   Image,
 } from "@react-pdf/renderer";
 
+const rowsPerPage = 10;
+
 export type CompanyProfile = {
   name: string;
   owner?: string | null;

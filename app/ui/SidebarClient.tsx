@@ -443,6 +443,12 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
           {"Sie haben einen Fehler entdeckt oder vermissen eine wichtige Funktionalit\u00e4t? Wir freuen uns auf Ihre R\u00fcckmeldung!"}
         </div>
         <div className="mt-3 text-cyan-300">Hilfe &amp; Service</div>
+        <a
+          href="/api/auth/logout"
+          className="mt-3 inline-flex rounded border border-slate-600 px-2 py-1 text-slate-200 transition hover:bg-slate-700/60"
+        >
+          Abmelden
+        </a>
       </div>
     </aside>
   );
