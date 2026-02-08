@@ -27,9 +27,16 @@ jobs:
 
       - name: Prepare release bundle
         run: |
-          rm -rf release
+          rm -rf release release.tar.gz
           mkdir -p release/.next
-          cp -R .next/standalone/* release/
+          STANDALONE_DIR="$(dirname "$(find .next/standalone -type f -name server.js ! -path '*/node_modules/*' | head -n 1)")"
+          if [ -z "$STANDALONE_DIR" ]; then
+            echo "Standalone server.js not found"
+            exit 1
+          fi
+          cp -R "$STANDALONE_DIR"/. release/
+          rm -f release/.env release/.env.* release/*.db release/*.db-shm release/*.db-wal
+          rm -rf release/data
           cp -R .next/static release/.next/static
           if [ -d public ]; then cp -R public release/public; fi
           cp ecosystem.config.cjs release/ecosystem.config.cjs
@@ -55,5 +62,6 @@ jobs:
             mkdir -p /var/www/detailflix
             tar -xzf /tmp/release.tar.gz -C /var/www/detailflix
             cd /var/www/detailflix
-            pm2 startOrReload ecosystem.config.cjs
+            pm2 delete detailflix || true
+            pm2 start ecosystem.config.cjs --only detailflix
             pm2 save
