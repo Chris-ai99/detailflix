@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clearAuthCookies } from "@/lib/auth";
+import { getPublicBaseUrl } from "@/lib/public-base-url";
 
 function clearSession(req: NextRequest) {
-  const res = NextResponse.redirect(new URL("/login", req.url));
+  const res = NextResponse.redirect(new URL("/login", getPublicBaseUrl(req)));
   clearAuthCookies(res);
   return res;
 }

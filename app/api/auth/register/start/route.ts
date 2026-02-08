@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { createRegistrationToken, findUserByEmail } from "@/lib/auth-db";
 import { sendRegistrationMail } from "@/lib/mailer";
+import { getPublicBaseUrl } from "@/lib/public-base-url";
 
 function redirectToRegister(req: NextRequest, status: string) {
-  const url = new URL("/register", req.url);
+  const url = new URL("/register", getPublicBaseUrl(req));
   url.searchParams.set("status", status);
   return NextResponse.redirect(url);
 }
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     workspaceName,
   });
 
-  const baseUrl = process.env.APP_BASE_URL?.trim() || req.nextUrl.origin;
+  const baseUrl = getPublicBaseUrl(req);
   const verifyUrl = `${baseUrl}/api/auth/register/verify?token=${encodeURIComponent(token)}`;
 
   try {

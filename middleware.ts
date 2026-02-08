@@ -4,6 +4,7 @@ import {
   verifyAuthSession,
   WORKSPACE_COOKIE_NAME,
 } from "@/lib/auth-session";
+import { getPublicBaseUrl } from "@/lib/public-base-url";
 
 function isPublicPath(pathname: string): boolean {
   return (
@@ -21,7 +22,7 @@ function isPublicPath(pathname: string): boolean {
 }
 
 function redirectToLogin(req: NextRequest) {
-  const loginUrl = new URL("/login", req.url);
+  const loginUrl = new URL("/login", getPublicBaseUrl(req));
   const next = `${req.nextUrl.pathname}${req.nextUrl.search}`;
   if (next && next !== "/") {
     loginUrl.searchParams.set("next", next);
@@ -39,7 +40,7 @@ export async function middleware(req: NextRequest) {
 
   if (pathname === "/login" || pathname === "/register") {
     if (authenticated) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      return NextResponse.redirect(new URL("/dashboard", getPublicBaseUrl(req)));
     }
     return NextResponse.next();
   }

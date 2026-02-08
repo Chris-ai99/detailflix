@@ -3,9 +3,10 @@ import { consumeRegistrationToken, createUserAndWorkspaceFromRegistration } from
 import { setAuthCookies } from "@/lib/auth";
 import { signAuthSession } from "@/lib/auth-session";
 import { ensureWorkspaceDatabase } from "@/lib/tenant-db";
+import { getPublicBaseUrl } from "@/lib/public-base-url";
 
 function redirectToRegister(req: NextRequest, status: string) {
-  const url = new URL("/register", req.url);
+  const url = new URL("/register", getPublicBaseUrl(req));
   url.searchParams.set("status", status);
   return NextResponse.redirect(url);
 }
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       role: account.role,
     });
 
-    const res = NextResponse.redirect(new URL("/dashboard", req.url));
+    const res = NextResponse.redirect(new URL("/dashboard", getPublicBaseUrl(req)));
     setAuthCookies(res, signed, account.workspaceId);
     return res;
   } catch {

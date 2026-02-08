@@ -4,6 +4,7 @@ import { findMembershipsByUserId, findUserByEmail } from "@/lib/auth-db";
 import { setAuthCookies } from "@/lib/auth";
 import { signAuthSession } from "@/lib/auth-session";
 import { ensureWorkspaceDatabase } from "@/lib/tenant-db";
+import { getPublicBaseUrl } from "@/lib/public-base-url";
 
 function getSafeNextPath(nextParam: string | null): string {
   if (!nextParam) return "/dashboard";
@@ -12,7 +13,7 @@ function getSafeNextPath(nextParam: string | null): string {
 }
 
 function redirectWithError(req: NextRequest, nextPath: string, error: string) {
-  const url = new URL("/login", req.url);
+  const url = new URL("/login", getPublicBaseUrl(req));
   url.searchParams.set("error", error);
   if (nextPath !== "/dashboard") {
     url.searchParams.set("next", nextPath);
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     role: membership.role,
   });
 
-  const res = NextResponse.redirect(new URL(nextPath, req.url));
+  const res = NextResponse.redirect(new URL(nextPath, getPublicBaseUrl(req)));
   setAuthCookies(res, token, membership.workspace_id);
   return res;
 }
