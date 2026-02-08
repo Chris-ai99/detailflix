@@ -1,5 +1,3 @@
-import { isAuthConfigured } from "@/lib/auth";
-
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
@@ -7,11 +5,21 @@ type LoginPageProps = {
   }>;
 };
 
+function getErrorMessage(error?: string) {
+  switch (error) {
+    case "credentials":
+      return "E-Mail oder Passwort ist falsch.";
+    case "workspace":
+      return "Für dieses Konto wurde kein Workspace gefunden.";
+    default:
+      return null;
+  }
+}
+
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
-  const hasError = params.error === "1";
   const next = params.next && params.next.startsWith("/") ? params.next : "/dashboard";
-  const configured = isAuthConfigured();
+  const errorMessage = getErrorMessage(params.error);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
@@ -22,19 +30,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
         <h1 className="mb-1 text-center text-2xl font-semibold text-slate-100">Anmeldung</h1>
         <p className="mb-6 text-center text-sm text-slate-400">
-          Bitte melde dich mit deinen Zugangsdaten an.
+          Melde dich mit deiner E-Mail-Adresse an.
         </p>
 
-        {hasError ? (
+        {errorMessage ? (
           <div className="mb-4 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-            Benutzername oder Passwort ist falsch.
-          </div>
-        ) : null}
-
-        {!configured ? (
-          <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-            Login ist noch nicht konfiguriert. Setze APP_AUTH_USERNAME, APP_AUTH_PASSWORD und
-            APP_AUTH_TOKEN in der Server-Umgebung.
+            {errorMessage}
           </div>
         ) : null}
 
@@ -42,12 +43,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <input type="hidden" name="next" value={next} />
 
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">Benutzername</span>
+            <span className="mb-1 block text-sm text-slate-300">E-Mail</span>
             <input
-              name="username"
-              type="text"
+              name="email"
+              type="email"
               required
-              autoComplete="username"
+              autoComplete="email"
               className="w-full rounded-lg border border-slate-600 bg-slate-900/80 px-3 py-2 text-slate-100 outline-none ring-cyan-400/40 transition focus:ring-2"
             />
           </label>
@@ -70,6 +71,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             Einloggen
           </button>
         </form>
+
+        <p className="mt-5 text-center text-sm text-slate-400">
+          Noch kein Konto?{" "}
+          <a href="/register" className="text-cyan-300 hover:text-cyan-200">
+            Jetzt registrieren
+          </a>
+        </p>
       </div>
     </main>
   );

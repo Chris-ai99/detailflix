@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  AUTH_COOKIE_NAME,
-  getSessionToken,
-  isAuthConfigured,
-  isValidCredentials,
-} from "@/lib/auth";
+import bcrypt from "bcryptjs";
+import { findMembershipsByUserId, findUserByEmail } from "@/lib/auth-db";
+import { setAuthCookies } from "@/lib/auth";
+import { signAuthSession } from "@/lib/auth-session";
+import { ensureWorkspaceDatabase } from "@/lib/tenant-db";
 
 function getSafeNextPath(nextParam: string | null): string {
   if (!nextParam) return "/dashboard";
@@ -12,9 +11,9 @@ function getSafeNextPath(nextParam: string | null): string {
   return nextParam;
 }
 
-function redirectToLogin(req: NextRequest, nextPath: string) {
+function redirectWithError(req: NextRequest, nextPath: string, error: string) {
   const url = new URL("/login", req.url);
-  url.searchParams.set("error", "1");
+  url.searchParams.set("error", error);
   if (nextPath !== "/dashboard") {
     url.searchParams.set("next", nextPath);
   }
@@ -23,24 +22,40 @@ function redirectToLogin(req: NextRequest, nextPath: string) {
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
-  const username = String(formData.get("username") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const nextPath = getSafeNextPath(String(formData.get("next") ?? ""));
 
-  if (!isAuthConfigured() || !isValidCredentials(username, password)) {
-    return redirectToLogin(req, nextPath);
+  if (!email || !password) {
+    return redirectWithError(req, nextPath, "credentials");
   }
 
-  const res = NextResponse.redirect(new URL(nextPath, req.url));
-  res.cookies.set({
-    name: AUTH_COOKIE_NAME,
-    value: getSessionToken(),
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 14,
+  const user = findUserByEmail(email);
+  if (!user) {
+    return redirectWithError(req, nextPath, "credentials");
+  }
+
+  const valid = await bcrypt.compare(password, user.password_hash);
+  if (!valid) {
+    return redirectWithError(req, nextPath, "credentials");
+  }
+
+  const memberships = findMembershipsByUserId(user.id);
+  const membership = memberships[0];
+  if (!membership) {
+    return redirectWithError(req, nextPath, "workspace");
+  }
+
+  ensureWorkspaceDatabase(membership.workspace_id);
+
+  const token = await signAuthSession({
+    userId: user.id,
+    workspaceId: membership.workspace_id,
+    email: user.email,
+    role: membership.role,
   });
 
+  const res = NextResponse.redirect(new URL(nextPath, req.url));
+  setAuthCookies(res, token, membership.workspace_id);
   return res;
 }

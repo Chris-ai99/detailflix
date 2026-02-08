@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# local auth + tenant databases
+/auth.db
+/auth.db-shm
+/auth.db-wal
+/data/workspaces/

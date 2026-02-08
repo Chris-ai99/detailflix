@@ -1,36 +1,67 @@
-export const AUTH_COOKIE_NAME = "detailflix_session";
+import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
+import {
+  AUTH_COOKIE_NAME,
+  getSessionMaxAgeSeconds,
+  type AuthSession,
+  verifyAuthSession,
+  WORKSPACE_COOKIE_NAME,
+} from "./auth-session";
 
-type AuthConfig = {
-  username: string;
-  password: string;
-  token: string;
-};
+export { AUTH_COOKIE_NAME, WORKSPACE_COOKIE_NAME } from "./auth-session";
 
-export function getAuthConfig(): AuthConfig {
-  return {
-    username: (process.env.APP_AUTH_USERNAME ?? "").trim(),
-    password: process.env.APP_AUTH_PASSWORD ?? "",
-    token: (process.env.APP_AUTH_TOKEN ?? "").trim(),
-  };
+export async function getSessionFromCookies(): Promise<AuthSession | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  const workspaceCookie = cookieStore.get(WORKSPACE_COOKIE_NAME)?.value;
+
+  const session = await verifyAuthSession(token);
+  if (!session) return null;
+  if (!workspaceCookie || workspaceCookie !== session.workspaceId) return null;
+
+  return session;
 }
 
-export function isAuthConfigured(): boolean {
-  const { username, password, token } = getAuthConfig();
-  return !!username && !!password && !!token;
+export function setAuthCookies(
+  response: NextResponse,
+  token: string,
+  workspaceId: string
+) {
+  const secure = process.env.NODE_ENV === "production";
+  const maxAge = getSessionMaxAgeSeconds();
+
+  response.cookies.set({
+    name: AUTH_COOKIE_NAME,
+    value: token,
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    path: "/",
+    maxAge,
+  });
+
+  response.cookies.set({
+    name: WORKSPACE_COOKIE_NAME,
+    value: workspaceId,
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    path: "/",
+    maxAge,
+  });
 }
 
-export function isValidCredentials(username: string, password: string): boolean {
-  const cfg = getAuthConfig();
-  if (!isAuthConfigured()) return false;
-  return username === cfg.username && password === cfg.password;
-}
-
-export function getSessionToken(): string {
-  return getAuthConfig().token;
-}
-
-export function isValidSessionToken(token?: string): boolean {
-  if (!token) return false;
-  if (!isAuthConfigured()) return false;
-  return token === getSessionToken();
+export function clearAuthCookies(response: NextResponse) {
+  const secure = process.env.NODE_ENV === "production";
+  for (const cookieName of [AUTH_COOKIE_NAME, WORKSPACE_COOKIE_NAME]) {
+    response.cookies.set({
+      name: cookieName,
+      value: "",
+      httpOnly: true,
+      secure,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+  }
 }

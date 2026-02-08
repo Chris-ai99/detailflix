@@ -1,12 +1,10 @@
 import "./globals.css";
 import Sidebar from "./ui/Sidebar";
-import { cookies } from "next/headers";
-import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  const authenticated = isValidSessionToken(token);
+  const session = await getSessionFromCookies();
+  const authenticated = !!session;
 
   return (
     <html lang="de">
