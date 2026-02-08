@@ -544,7 +544,7 @@ export async function convertOfferToInvoice(offerId: string) {
       isFinal: false,
       issueDate,
       dueDate,
-      serviceDate,
+      serviceDate: issueDate,
       customerId: offer.customerId,
       vehicleId: offer.vehicleId,
       sourceOfferId: offer.id,
