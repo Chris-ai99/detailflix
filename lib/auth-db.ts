@@ -33,6 +33,12 @@ type RegistrationTokenRow = {
   expires_at: string;
 };
 
+type PasswordResetTokenRow = {
+  token: string;
+  user_id: string;
+  expires_at: string;
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -96,6 +102,30 @@ function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_registration_tokens_email
       ON registration_tokens(email);
+
+    CREATE TABLE IF NOT EXISTS access_requests (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      full_name TEXT,
+      workspace_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_access_requests_email_status
+      ON access_requests(email, status);
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
+      ON password_reset_tokens(user_id);
   `);
 
   globalForAuthDb.db = db;
@@ -142,6 +172,32 @@ export function findMembershipsByUserId(userId: string): MembershipRow[] {
     "SELECT workspace_id, role FROM memberships WHERE user_id = ? ORDER BY created_at ASC"
   );
   return stmt.all(userId) as MembershipRow[];
+}
+
+export function hasPendingAccessRequestByEmail(email: string): boolean {
+  const db = getDb();
+  const row = db
+    .prepare(
+      "SELECT 1 FROM access_requests WHERE lower(email) = lower(?) AND status = 'PENDING' LIMIT 1"
+    )
+    .get(email);
+  return !!row;
+}
+
+export function createAccessRequest(input: {
+  email: string;
+  fullName: string | null;
+  workspaceName: string;
+}): string {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  const now = nowIso();
+
+  db.prepare(
+    "INSERT INTO access_requests (id, email, full_name, workspace_name, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'PENDING', ?, ?)"
+  ).run(id, input.email.toLowerCase(), input.fullName, input.workspaceName, now, now);
+
+  return id;
 }
 
 export function createRegistrationToken(input: {
@@ -247,4 +303,46 @@ export function createUserAndWorkspaceFromRegistration(reg: RegistrationTokenRow
     email,
     role: "OWNER",
   };
+}
+
+export function createPasswordResetTokenForUser(userId: string): string {
+  const db = getDb();
+  const token = crypto.randomUUID().replaceAll("-", "");
+  const now = nowIso();
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60).toISOString();
+
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(userId);
+    db.prepare(
+      "INSERT INTO password_reset_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
+    ).run(token, userId, expiresAt, now);
+  });
+
+  tx();
+  return token;
+}
+
+export function consumePasswordResetToken(token: string): { userId: string } | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT token, user_id, expires_at FROM password_reset_tokens WHERE token = ? LIMIT 1")
+    .get(token) as PasswordResetTokenRow | undefined;
+
+  if (!row) return null;
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    db.prepare("DELETE FROM password_reset_tokens WHERE token = ?").run(token);
+    return null;
+  }
+
+  db.prepare("DELETE FROM password_reset_tokens WHERE token = ?").run(token);
+  return { userId: row.user_id };
+}
+
+export function updateUserPassword(userId: string, passwordHash: string): void {
+  const db = getDb();
+  db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(
+    passwordHash,
+    nowIso(),
+    userId
+  );
 }

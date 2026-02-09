@@ -15,6 +15,23 @@ export function isMailConfigured(): boolean {
   return !!cfg.host && !!cfg.port && !!cfg.user && !!cfg.pass && !!cfg.from;
 }
 
+function getTransport() {
+  const cfg = getMailConfig();
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465,
+    auth: {
+      user: cfg.user,
+      pass: cfg.pass,
+    },
+  });
+}
+
+function getAccessRequestRecipient(): string {
+  return (process.env.ACCESS_REQUEST_TO ?? process.env.MAIL_FROM ?? "").trim();
+}
+
 export async function sendRegistrationMail(params: {
   to: string;
   verifyUrl: string;
@@ -24,16 +41,7 @@ export async function sendRegistrationMail(params: {
   if (!isMailConfigured()) {
     throw new Error("MAIL_NOT_CONFIGURED");
   }
-
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.port === 465,
-    auth: {
-      user: cfg.user,
-      pass: cfg.pass,
-    },
-  });
+  const transporter = getTransport();
 
   await transporter.sendMail({
     from: cfg.from,
@@ -47,6 +55,60 @@ export async function sendRegistrationMail(params: {
       params.verifyUrl,
       ``,
       `Falls du das nicht warst, ignoriere diese E-Mail.`,
+    ].join("\n"),
+  });
+}
+
+export async function sendAccessRequestMail(params: {
+  requesterEmail: string;
+  requesterName: string | null;
+  workspaceName: string;
+}) {
+  const cfg = getMailConfig();
+  const to = getAccessRequestRecipient();
+  if (!isMailConfigured() || !to) {
+    throw new Error("MAIL_NOT_CONFIGURED");
+  }
+
+  const transporter = getTransport();
+  await transporter.sendMail({
+    from: cfg.from,
+    to,
+    subject: "Neue Freigabeanfrage",
+    text: [
+      `Es wurde eine neue Freigabe angefragt.`,
+      ``,
+      `E-Mail: ${params.requesterEmail}`,
+      `Name: ${params.requesterName || "-"}`,
+      `Firmen-/Kontoname: ${params.workspaceName}`,
+      ``,
+      `Bitte Konto manuell freigeben/anlegen.`,
+    ].join("\n"),
+  });
+}
+
+export async function sendPasswordResetMail(params: {
+  to: string;
+  resetUrl: string;
+}) {
+  const cfg = getMailConfig();
+  if (!isMailConfigured()) {
+    throw new Error("MAIL_NOT_CONFIGURED");
+  }
+
+  const transporter = getTransport();
+  await transporter.sendMail({
+    from: cfg.from,
+    to: params.to,
+    subject: "Passwort zuruecksetzen",
+    text: [
+      `Hallo,`,
+      ``,
+      `du kannst dein Passwort mit diesem Link zuruecksetzen:`,
+      params.resetUrl,
+      ``,
+      `Der Link ist 60 Minuten gueltig.`,
+      `Falls du das nicht angefragt hast, ignoriere diese E-Mail.`,
     ].join("\n"),
   });
 }

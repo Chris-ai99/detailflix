@@ -10,10 +10,14 @@ function isPublicPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
     pathname === "/register" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
     pathname === "/api/auth/register/start" ||
     pathname === "/api/auth/register/verify" ||
+    pathname === "/api/auth/password/forgot" ||
+    pathname === "/api/auth/password/reset" ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
     pathname.startsWith("/detailix-") ||

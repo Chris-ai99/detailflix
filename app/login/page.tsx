@@ -1,6 +1,7 @@
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
+    status?: string;
     next?: string;
   }>;
 };
@@ -10,7 +11,16 @@ function getErrorMessage(error?: string) {
     case "credentials":
       return "E-Mail oder Passwort ist falsch.";
     case "workspace":
-      return "Für dieses Konto wurde kein Workspace gefunden.";
+      return "Fuer dieses Konto wurde kein Workspace gefunden.";
+    default:
+      return null;
+  }
+}
+
+function getStatusMessage(status?: string) {
+  switch (status) {
+    case "pw-reset":
+      return "Passwort wurde geaendert. Bitte neu einloggen.";
     default:
       return null;
   }
@@ -20,6 +30,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const next = params.next && params.next.startsWith("/") ? params.next : "/dashboard";
   const errorMessage = getErrorMessage(params.error);
+  const statusMessage = getStatusMessage(params.status);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
@@ -36,6 +47,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         {errorMessage ? (
           <div className="mb-4 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
             {errorMessage}
+          </div>
+        ) : null}
+
+        {statusMessage ? (
+          <div className="mb-4 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+            {statusMessage}
           </div>
         ) : null}
 
@@ -64,6 +81,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             />
           </label>
 
+          <div className="text-right text-sm">
+            <a href="/forgot-password" className="text-cyan-300 hover:text-cyan-200">
+              Passwort vergessen?
+            </a>
+          </div>
+
           <button
             type="submit"
             className="mt-2 w-full rounded-lg bg-cyan-500 px-4 py-2 font-medium text-slate-950 transition hover:bg-cyan-400"
@@ -75,10 +98,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <p className="mt-5 text-center text-sm text-slate-400">
           Noch kein Konto?{" "}
           <a href="/register" className="text-cyan-300 hover:text-cyan-200">
-            Jetzt registrieren
+            Freigabe anfragen
           </a>
         </p>
       </div>
     </main>
   );
 }
+
