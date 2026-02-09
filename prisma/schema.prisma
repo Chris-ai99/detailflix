@@ -16,13 +16,32 @@ model Customer {
   street String?
   zip    String?
   city   String?
+  country String?
   notes  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents Document[]
-  vehicles  Vehicle[]
+  documents   Document[]
+  vehicles    Vehicle[]
+  attachments CustomerAttachment[]
+}
+
+model CustomerAttachment {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  kind       CustomerAttachmentKind @default(GENERAL)
+  title      String
+  mimeType   String
+  sizeBytes  Int
+  storagePath String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, createdAt])
 }
 
 model CompanySettings {
@@ -233,4 +252,11 @@ enum TaxMode {
   MARGIN_SCHEME
   EU_NET_WITH_DEPOSIT
   NON_EU_NET_WITH_DEPOSIT
+}
+
+enum CustomerAttachmentKind {
+  GENERAL
+  VEHICLE_REGISTRATION
+  PRIVACY_AGREEMENT_UNSIGNED
+  PRIVACY_AGREEMENT_SIGNED
 }

@@ -65,19 +65,15 @@ export default async function CustomersPage({
   searchParams,
 }: {
   searchParams?:
-    | { type?: string; from?: string; to?: string; q?: string }
-    | Promise<{ type?: string; from?: string; to?: string; q?: string }>;
+    | { from?: string; to?: string; q?: string }
+    | Promise<{ from?: string; to?: string; q?: string }>;
 }) {
   const resolved = searchParams ? await searchParams : undefined;
-  const typeFilter = resolved?.type ?? "all";
   const fromRaw = resolved?.from ?? "";
   const toRaw = resolved?.to ?? "";
   const q = (resolved?.q ?? "").trim();
 
   const where: any = {};
-
-  if (typeFilter === "business") where.isBusiness = true;
-  if (typeFilter === "private") where.isBusiness = false;
 
   if (fromRaw || toRaw) {
     const range: any = {};
@@ -93,6 +89,7 @@ export default async function CustomersPage({
       { phone: { contains: q } },
       { vatId: { contains: q } },
       { city: { contains: q } },
+      { country: { contains: q } },
     ];
   }
 
@@ -138,19 +135,6 @@ export default async function CustomersPage({
             </div>
           </div>
 
-          <div>
-            <label className="block text-[11px] text-slate-400">Typ</label>
-            <select
-              name="type"
-              defaultValue={typeFilter}
-              className="w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
-            >
-              <option value="all">Alle anzeigen</option>
-              <option value="private">Privat</option>
-              <option value="business">Gewerbe</option>
-            </select>
-          </div>
-
           <div className="ml-auto flex items-center gap-2">
             <input
               name="q"
@@ -174,7 +158,6 @@ export default async function CustomersPage({
             <tr className="border-b border-slate-700">
               <th className="p-3 text-left">#</th>
               <th className="p-3 text-left">Kunde</th>
-              <th className="p-3 text-left">Typ</th>
               <th className="p-3 text-left">E-Mail</th>
               <th className="p-3 text-left">Telefon</th>
               <th className="p-3 text-left">erstellt am</th>
@@ -183,14 +166,12 @@ export default async function CustomersPage({
           </thead>
           <tbody>
             {customers.map((c, idx) => {
-              const customerName = c.name || (c.isBusiness ? "Gewerbekunde" : "Ohne Name");
-              const typeLabel = c.isBusiness ? "Gewerbe" : "Privat";
+              const customerName = c.name || "Ohne Name";
 
               return (
                 <tr key={c.id} className="border-b border-slate-700 last:border-b-0">
                   <td className="p-3 text-slate-400">{idx + 1}</td>
                   <td className="p-3 text-slate-200">{customerName}</td>
-                  <td className="p-3 text-slate-300">{typeLabel}</td>
                   <td className="p-3 text-slate-200">{c.email ?? DASH}</td>
                   <td className="p-3 text-slate-200">{c.phone ?? DASH}</td>
                   <td className="p-3 text-slate-300">{formatDate(c.createdAt)}</td>
@@ -215,7 +196,7 @@ export default async function CustomersPage({
 
             {customers.length === 0 && (
               <tr>
-                <td className="p-6 text-slate-400" colSpan={7}>
+                <td className="p-6 text-slate-400" colSpan={6}>
                   Noch keine Kunden vorhanden.
                 </td>
               </tr>

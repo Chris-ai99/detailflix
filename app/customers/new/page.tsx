@@ -9,10 +9,6 @@ export default function NewCustomerPage() {
         action={createCustomer}
         className="flex flex-col gap-3 bg-slate-900 p-4 rounded"
       >
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input type="checkbox" name="isBusiness" className="h-4 w-4" />
-          Gewerbekunde
-        </label>
         <input
           name="name"
           placeholder="Name / Firma"
@@ -52,6 +48,13 @@ export default function NewCustomerPage() {
             className="p-2 rounded bg-slate-800 flex-1"
           />
         </div>
+
+        <input
+          name="country"
+          defaultValue="Deutschland"
+          placeholder="Land"
+          className="p-2 rounded bg-slate-800"
+        />
 
         <textarea
           name="notes"

@@ -26,16 +26,6 @@ export default async function EditCustomerPage({
       >
         <input type="hidden" name="id" value={customer.id} />
 
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            name="isBusiness"
-            className="h-4 w-4"
-            defaultChecked={customer.isBusiness}
-          />
-          Gewerbekunde
-        </label>
-
         <input
           name="name"
           defaultValue={customer.name ?? ""}
@@ -85,6 +75,13 @@ export default async function EditCustomerPage({
             className="p-2 rounded bg-slate-800 flex-1"
           />
         </div>
+
+        <input
+          name="country"
+          defaultValue={customer.country ?? "Deutschland"}
+          placeholder="Land"
+          className="p-2 rounded bg-slate-800"
+        />
 
         <textarea
           name="notes"
