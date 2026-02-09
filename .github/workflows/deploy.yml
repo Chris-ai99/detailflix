@@ -10,8 +10,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO_URL="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          TARGET_SHA="${{ github.sha }}"
+
+          for attempt in {1..8}; do
+            echo "Checkout attempt ${attempt}/8 for ${TARGET_SHA}"
+            rm -rf .git
+            git init .
+            git remote add origin "${REPO_URL}"
+
+            if git -c protocol.version=2 fetch --no-tags --prune --depth=1 origin "${TARGET_SHA}"; then
+              git checkout --force FETCH_HEAD
+              echo "Checkout succeeded"
+              exit 0
+            fi
+
+            echo "Checkout failed (attempt ${attempt})"
+            sleep $((attempt * 10))
+          done
+
+          echo "Checkout failed after 8 attempts"
+          exit 1
 
       - name: Use Node.js
         uses: actions/setup-node@v4
