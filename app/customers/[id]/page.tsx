@@ -473,18 +473,21 @@ export default async function CustomerDetailPage({
             <div className="mt-2 flex flex-wrap gap-2">
               <Link
                 href={`/offers/new?customerId=${encodeURIComponent(customer.id)}`}
+                prefetch={false}
                 className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
               >
                 Angebot erstellen
               </Link>
               <Link
                 href={`/orders/new?customerId=${encodeURIComponent(customer.id)}`}
+                prefetch={false}
                 className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
               >
                 Auftrag erstellen
               </Link>
               <Link
                 href={`/invoices/new?customerId=${encodeURIComponent(customer.id)}`}
+                prefetch={false}
                 className="rounded bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-500"
               >
                 Rechnung erstellen
@@ -607,18 +610,21 @@ export default async function CustomerDetailPage({
               </Link>
               <Link
                 href={`/offers/new?customerId=${encodeURIComponent(customer.id)}`}
+                prefetch={false}
                 className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
               >
                 Angebot erstellen
               </Link>
               <Link
                 href={`/orders/new?customerId=${encodeURIComponent(customer.id)}`}
+                prefetch={false}
                 className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
               >
                 Auftrag erstellen
               </Link>
               <Link
                 href={`/invoices/new?customerId=${encodeURIComponent(customer.id)}`}
+                prefetch={false}
                 className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
               >
                 Rechnung erstellen

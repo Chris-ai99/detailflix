@@ -114,13 +114,13 @@ function CustomerDocQuickLinks({ customerId }: { customerId: string }) {
 
   return (
     <div className="flex flex-wrap justify-end gap-1">
-      <Link href={`/offers/new${query}`} className={linkClass}>
+      <Link href={`/offers/new${query}`} prefetch={false} className={linkClass}>
         Angebot
       </Link>
-      <Link href={`/orders/new${query}`} className={linkClass}>
+      <Link href={`/orders/new${query}`} prefetch={false} className={linkClass}>
         Auftrag
       </Link>
-      <Link href={`/invoices/new${query}`} className={linkClass}>
+      <Link href={`/invoices/new${query}`} prefetch={false} className={linkClass}>
         Rechnung
       </Link>
     </div>

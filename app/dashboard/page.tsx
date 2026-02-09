@@ -456,6 +456,7 @@ export default async function DashboardPage() {
                 </Link>
                 <Link
                   href="/orders/new"
+                  prefetch={false}
                   className="flex-1 rounded bg-cyan-600 px-3 py-2 text-center text-xs text-white hover:bg-cyan-500 sm:flex-none"
                 >
                   + Neu

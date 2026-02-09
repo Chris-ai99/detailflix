@@ -14,13 +14,13 @@ function CustomerDocQuickLinks({ customerId }: { customerId: string }) {
     "rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800";
   return (
     <div className="flex flex-wrap justify-end gap-1">
-      <Link href={`/offers/new${query}`} className={className}>
+      <Link href={`/offers/new${query}`} prefetch={false} className={className}>
         Angebot
       </Link>
-      <Link href={`/orders/new${query}`} className={className}>
+      <Link href={`/orders/new${query}`} prefetch={false} className={className}>
         Auftrag
       </Link>
-      <Link href={`/invoices/new${query}`} className={className}>
+      <Link href={`/invoices/new${query}`} prefetch={false} className={className}>
         Rechnung
       </Link>
     </div>

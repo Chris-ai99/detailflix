@@ -153,6 +153,7 @@ export default async function OrdersPage({
         <div className="flex items-center gap-2">
           <Link
             href="/orders/new"
+            prefetch={false}
             className="inline-flex items-center gap-2 rounded bg-cyan-600 px-3 py-1 text-xs font-semibold text-white hover:bg-cyan-500"
           >
             + Neu
