@@ -84,7 +84,7 @@ jobs:
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=20 \
-              release.tar.gz "$VPS_USER@$VPS_HOST:release.tar.gz"; then
+              release.tar.gz "$VPS_USER@$VPS_HOST:~/release.tar.gz"; then
               echo "Upload succeeded"
               exit 0
             fi
@@ -102,7 +102,7 @@ jobs:
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         run: |
           set -euo pipefail
-          REMOTE_CMD='set -e; mkdir -p /var/www/detailflix; tar -xzf ~/release.tar.gz -C /var/www/detailflix; cd /var/www/detailflix; pm2 delete detailflix || true; pm2 start ecosystem.config.cjs --only detailflix; pm2 save'
+          REMOTE_CMD='set -euo pipefail; APP_DIR="/var/www/detailflix"; RELEASE_TAR="$HOME/release.tar.gz"; STAGING_DIR="$HOME/detailflix-release"; mkdir -p "$APP_DIR"; rm -rf "$STAGING_DIR"; mkdir -p "$STAGING_DIR"; tar -xzf "$RELEASE_TAR" -C "$STAGING_DIR"; if command -v rsync >/dev/null 2>&1; then rsync -a --delete --exclude ".env" --exclude "data" "$STAGING_DIR"/ "$APP_DIR"/; else find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name ".env" ! -name "data" -exec rm -rf {} +; cp -a "$STAGING_DIR"/. "$APP_DIR"/; fi; cd "$APP_DIR"; if pm2 describe detailflix >/dev/null 2>&1; then pm2 startOrRestart ecosystem.config.cjs --only detailflix --update-env; else pm2 start ecosystem.config.cjs --only detailflix; fi; pm2 save; node -e "const http=require(\"http\");let tries=0;function check(){tries+=1;const req=http.get(\"http://127.0.0.1:3000/login\",res=>{res.resume();if(res.statusCode&&res.statusCode<500){process.exit(0)}if(tries>=20)process.exit(1);setTimeout(check,1000)});req.on(\"error\",()=>{if(tries>=20)process.exit(1);setTimeout(check,1000)});req.setTimeout(2000,()=>{req.destroy();if(tries>=20)process.exit(1);setTimeout(check,1000);});}check();"'
           for attempt in {1..6}; do
             echo "Remote deploy attempt ${attempt}/6"
             if sshpass -p "$VPS_PASSWORD" ssh \
