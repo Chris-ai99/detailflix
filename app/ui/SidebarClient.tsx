@@ -148,7 +148,6 @@ function MenuRow({
             {count}
           </span>
         ) : null}
-        
       </div>
     </div>
   );
@@ -203,7 +202,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [invoicesOpen, setInvoicesOpen] = useState(false);
-  const [customersOpen, setCustomersOpen] = useState(false);
+  const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const [vehiclesSalesOpen, setVehiclesSalesOpen] = useState(false);
 
   const vehiclesSalesTotal = counts.vehiclesForSale + counts.vehiclesArchive;
@@ -226,11 +225,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
     <aside className="w-64 bg-slate-800 min-h-screen border-r border-slate-700/60 flex flex-col">
       <div className="p-4">
         <div className="flex items-center">
-          <img
-            src="/detailix-wordmark.svg"
-            alt="Autosello"
-            className="h-6 w-auto"
-          />
+          <img src="/detailix-wordmark.svg" alt="Autosello" className="h-6 w-auto" />
         </div>
       </div>
 
@@ -305,26 +300,30 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
 
         <div className="mt-1 border-t border-slate-700/60 pt-2" />
 
-        <MenuRow label={"Auftr\u00e4ge"} icon="bolt" href="/orders" count={counts.orders} />
-
+        <MenuRow label="Kunden anlegen" icon="users" href="/customers" count={counts.customers} />
+        <MenuRow
+          label="Angebot erstellen"
+          icon="tag"
+          href="/offers"
+          count={counts.offers}
+        />
+        <MenuRow label="Auftrag erstellen" icon="bolt" href="/orders" count={counts.orders} />
+        <MenuRow label="Termin erstellen" icon="calendar" placeholder />
         <MenuRow
           label="Rechnungen"
           icon="receipt"
           count={counts.invoices}
-          onToggle={() => {
-            setInvoicesOpen((v) => {
-              const next = !v;
-              if (next) {
-                setCustomersOpen(false);
-                setVehiclesSalesOpen(false);
-              }
-              return next;
-            });
-          }}
+          onToggle={() => setInvoicesOpen((v) => !v)}
           isOpen={invoicesOpen}
         />
         {invoicesOpen && (
           <div className="space-y-1">
+            <MenuRow
+              label="Rechnung erstellen"
+              icon="receipt"
+              href="/invoices/new"
+              className="pl-8 text-xs"
+            />
             <MenuRow
               label="Rechnungen"
               icon="receipt"
@@ -346,43 +345,30 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
               count={counts.stornos}
               className="pl-8 text-xs"
             />
+          </div>
+        )}
+        <MenuRow label="Leistungen" icon="tool" href="/services" count={counts.services} />
+
+        <div className="mt-1 border-t border-slate-700/60 pt-2" />
+
+        <MenuRow
+          label="Coming Soon"
+          icon="chip"
+          onToggle={() => {
+            setComingSoonOpen((v) => {
+              const next = !v;
+              if (!next) setVehiclesSalesOpen(false);
+              return next;
+            });
+          }}
+          isOpen={comingSoonOpen}
+        />
+        {comingSoonOpen && (
+          <div className="space-y-1">
             <MenuRow
               label="E-Rechnung Mailbox"
               icon="receipt"
               placeholder
-              className="pl-8 text-xs"
-            />
-          </div>
-        )}
-
-        <MenuRow label="Angebote" icon="tag" href="/offers" count={counts.offers} />
-
-        <MenuRow label="Dellenkalkulation" icon="grid" placeholder />
-        <MenuRow label="Mitarbeiter" icon="users" placeholder />
-        <MenuRow label="Termine" icon="calendar" placeholder />
-
-        <MenuRow
-          label="Kunden"
-          icon="users"
-          count={counts.customers}
-          onToggle={() => {
-            setCustomersOpen((v) => {
-              const next = !v;
-              if (next) {
-                setInvoicesOpen(false);
-                setVehiclesSalesOpen(false);
-              }
-              return next;
-            });
-          }}
-          isOpen={customersOpen}
-        />
-        {customersOpen && (
-          <div className="space-y-1">
-            <MenuRow
-              label={"\u00dcbersicht"}
-              icon="grid"
-              href="/customers"
               className="pl-8 text-xs"
             />
             <MenuRow
@@ -392,57 +378,45 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
               count={counts.vehiclesCustomer}
               className="pl-8 text-xs"
             />
+            <MenuRow
+              label="Fahrzeug Verkauf"
+              icon="car"
+              count={vehiclesSalesTotal}
+              onToggle={() => setVehiclesSalesOpen((v) => !v)}
+              isOpen={vehiclesSalesOpen}
+              className="pl-8 text-xs"
+            />
+            {vehiclesSalesOpen && (
+              <div className="space-y-1">
+                <MenuRow
+                  label="Fahrzeuge Verkauf"
+                  icon="car"
+                  href="/vehicles/for-sale"
+                  count={counts.vehiclesForSale}
+                  className="pl-12 text-xs"
+                />
+                <MenuRow
+                  label="Fahrzeuge Archiv"
+                  icon="car"
+                  href="/vehicles/archive"
+                  count={counts.vehiclesArchive}
+                  className="pl-12 text-xs"
+                />
+              </div>
+            )}
+            <MenuRow label="Dellenkalkulation" icon="grid" placeholder className="pl-8 text-xs" />
+            <MenuRow label="Mitarbeiter" icon="users" placeholder className="pl-8 text-xs" />
+            <MenuRow label="Geraetemiete" icon="briefcase" placeholder className="pl-8 text-xs" />
+            <MenuRow label="APPs" icon="chip" placeholder className="pl-8 text-xs" />
+            <MenuRow label="Updates" icon="bell" placeholder className="pl-8 text-xs" />
           </div>
         )}
 
-        <MenuRow
-          label="Fahrzeug Verkauf"
-          icon="car"
-          count={vehiclesSalesTotal}
-          onToggle={() => {
-            setVehiclesSalesOpen((v) => {
-              const next = !v;
-              if (next) {
-                setInvoicesOpen(false);
-                setCustomersOpen(false);
-              }
-              return next;
-            });
-          }}
-          isOpen={vehiclesSalesOpen}
-        />
-        {vehiclesSalesOpen && (
-          <div className="space-y-1">
-            <MenuRow
-              label="Fahrzeuge Verkauf"
-              icon="car"
-              href="/vehicles/for-sale"
-              count={counts.vehiclesForSale}
-              className="pl-8 text-xs"
-            />
-            <MenuRow
-              label="Fahrzeuge Archiv"
-              icon="car"
-              href="/vehicles/archive"
-              count={counts.vehiclesArchive}
-              className="pl-8 text-xs"
-            />
-          </div>
-        )}
-
-        <MenuRow label="Leistungen" icon="tool" href="/services" count={counts.services} />
-
-        <MenuRow label={"Ger\u00e4temiete"} icon="briefcase" placeholder />
-        <MenuRow label="APPs" icon="chip" placeholder />
-        <MenuRow label="Updates" icon="bell" placeholder />
         <MenuRow label="Einstellungen" icon="gear" href="/settings" />
       </nav>
 
       <div className="mt-auto px-4 py-4 text-xs text-slate-300">
-        <div className="text-rose-400">
-          {"Sie haben einen Fehler entdeckt oder vermissen eine wichtige Funktionalit\u00e4t? Wir freuen uns auf Ihre R\u00fcckmeldung!"}
-        </div>
-        <div className="mt-3 text-cyan-300">Hilfe &amp; Service</div>
+        <div className="text-cyan-300">Hilfe &amp; Service</div>
         <a
           href="/api/auth/logout"
           className="mt-3 inline-flex rounded border border-slate-600 px-2 py-1 text-slate-200 transition hover:bg-slate-700/60"
