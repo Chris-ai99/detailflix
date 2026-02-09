@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { getSessionFromCookies } from "./auth";
+import { getWorkspaceIdFromCookies } from "./auth";
 import { ensureWorkspaceDatabase, getWorkspaceDatabaseUrl } from "./tenant-db";
 
 type PrismaGlobal = {
@@ -62,9 +62,9 @@ function getWorkspaceClient(workspaceId: string): PrismaClient {
 }
 
 async function getActiveClient(): Promise<PrismaClient> {
-  const session = await getSessionFromCookies();
-  if (!session) return getSharedClient();
-  return getWorkspaceClient(session.workspaceId);
+  const workspaceId = await getWorkspaceIdFromCookies();
+  if (!workspaceId) return getSharedClient();
+  return getWorkspaceClient(workspaceId);
 }
 
 function createModelProxy(modelName: string) {

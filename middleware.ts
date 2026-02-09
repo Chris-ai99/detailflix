@@ -39,6 +39,13 @@ function redirectToLogin(req: NextRequest) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Public paths should bypass auth checks entirely (perf + fewer crypto ops).
+  // Keep /login and /register excluded here, because authenticated users
+  // should still be redirected to /dashboard.
+  if (pathname !== "/login" && pathname !== "/register" && isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
   const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
   const workspaceCookie = req.cookies.get(WORKSPACE_COOKIE_NAME)?.value;
   const session = await verifyAuthSession(token);
@@ -48,10 +55,6 @@ export async function middleware(req: NextRequest) {
     if (authenticated) {
       return NextResponse.redirect(new URL("/dashboard", getPublicBaseUrl(req)));
     }
-    return NextResponse.next();
-  }
-
-  if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
