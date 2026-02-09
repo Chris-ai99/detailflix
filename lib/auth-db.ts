@@ -58,6 +58,11 @@ type PasswordResetTokenRow = {
 };
 
 const REGISTRATION_TOKEN_TTL_MS = 1000 * 60 * 60 * 24;
+const SQLITE_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.SQLITE_TIMEOUT_MS ?? "2000");
+  if (!Number.isFinite(parsed) || parsed <= 0) return 2000;
+  return Math.trunc(parsed);
+})();
 
 function nowIso() {
   return new Date().toISOString();
@@ -77,10 +82,10 @@ function getDb(): Database.Database {
   const dbPath = getAuthDbPath();
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-  const db = new Database(dbPath);
+  const db = new Database(dbPath, { timeout: SQLITE_TIMEOUT_MS });
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
-  db.pragma("busy_timeout = 10000");
+  db.pragma(`busy_timeout = ${SQLITE_TIMEOUT_MS}`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (

@@ -4,6 +4,11 @@ import Database from "better-sqlite3";
 
 const WORKSPACE_SCHEMA_BASELINE_TIMESTAMP = "20260207234745";
 const CUSTOMER_ATTACHMENTS_MIGRATION = "20260209094500_add_customer_country_and_attachments";
+const SQLITE_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.SQLITE_TIMEOUT_MS ?? "2000");
+  if (!Number.isFinite(parsed) || parsed <= 0) return 2000;
+  return Math.trunc(parsed);
+})();
 
 function getWorkspaceDir(): string {
   return path.join(process.cwd(), "data", "workspaces");
@@ -206,13 +211,13 @@ function ensureDocumentVehicleSnapshotColumns(db: Database.Database) {
 function ensureDatabaseAtPath(dbPath: string): string {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-  const db = new Database(dbPath, { timeout: 10_000 });
+  const db = new Database(dbPath, { timeout: SQLITE_TIMEOUT_MS });
   try {
     db.pragma("foreign_keys = ON");
     // Stabiler unter parallelen Reads/Writes (Sidebar, Listen, Uploads etc.).
     db.pragma("journal_mode = WAL");
     db.pragma("synchronous = NORMAL");
-    db.pragma("busy_timeout = 10000");
+    db.pragma(`busy_timeout = ${SQLITE_TIMEOUT_MS}`);
     applyMigrations(db);
     ensureCustomerIdentityColumns(db);
     ensureCustomerAttachmentVehicleColumn(db);

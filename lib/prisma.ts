@@ -3,6 +3,12 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { getWorkspaceIdFromCookies } from "./auth";
 import { ensurePrimaryDatabase, ensureWorkspaceDatabase, getWorkspaceDatabaseUrl } from "./tenant-db";
 
+const SQLITE_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.SQLITE_TIMEOUT_MS ?? "2000");
+  if (!Number.isFinite(parsed) || parsed <= 0) return 2000;
+  return Math.trunc(parsed);
+})();
+
 type PrismaGlobal = {
   clients?: Map<string, PrismaClient>;
   initializedWorkspaces?: Set<string>;
@@ -35,7 +41,7 @@ function getSharedClient(): PrismaClient {
 
   const adapter = new PrismaBetterSqlite3({
     url: sharedDatabaseUrl,
-    timeout: 10_000,
+    timeout: SQLITE_TIMEOUT_MS,
   });
   const client = new PrismaClient({ adapter, log: ["error", "warn"] });
   map.set(key, client);
@@ -57,7 +63,7 @@ function getWorkspaceClient(workspaceId: string): PrismaClient {
 
   const adapter = new PrismaBetterSqlite3({
     url: getWorkspaceDatabaseUrl(workspaceId),
-    timeout: 10_000,
+    timeout: SQLITE_TIMEOUT_MS,
   });
   const client = new PrismaClient({ adapter, log: ["error", "warn"] });
   map.set(key, client);
