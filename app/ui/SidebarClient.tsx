@@ -228,7 +228,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
         <div className="flex items-center">
           <img
             src="/detailix-wordmark.svg"
-            alt="Detailix"
+            alt="Autosello"
             className="h-6 w-auto"
           />
         </div>

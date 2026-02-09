@@ -360,13 +360,13 @@ export default async function DashboardPage() {
         <div className="flex items-center gap-3">
           <img
             src="/detailix-wordmark.svg"
-            alt="Detailix"
+            alt="Autosello"
             className="h-9 w-auto"
             loading="lazy"
           />
           <img
             src="/detailix-car.png"
-            alt="Detailix Fahrzeug"
+            alt="Autosello Fahrzeug"
             className="h-12 w-auto object-contain"
             loading="lazy"
           />

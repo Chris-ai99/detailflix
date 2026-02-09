@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 140" role="img" aria-label="Detailix">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 140" role="img" aria-label="Autosello">
   <rect width="720" height="140" fill="none"/>
   <g transform="translate(8 110) skewX(-12)">
     <text
@@ -9,8 +9,8 @@
       letter-spacing="8"
       fill="#e5e7eb"
     >
-      DETAILIX
+      AUTOSELLO
     </text>
-    <path d="M315 18 h64 l-12 18 h-64 z" fill="#ef4444"/>
+    <path d="M350 18 h64 l-12 18 h-64 z" fill="#ef4444"/>
   </g>
 </svg>

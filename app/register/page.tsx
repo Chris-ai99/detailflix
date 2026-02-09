@@ -41,7 +41,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
     <main className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-700/70 bg-slate-800/90 p-8 shadow-2xl shadow-slate-950/60">
         <div className="mb-8 flex justify-center">
-          <img src="/detailix-wordmark.svg" alt="Detailix" className="h-7 w-auto" />
+          <img src="/detailix-wordmark.svg" alt="Autosello" className="h-7 w-auto" />
         </div>
 
         <h1 className="mb-1 text-center text-2xl font-semibold text-slate-100">
