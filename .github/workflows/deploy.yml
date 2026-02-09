@@ -84,7 +84,7 @@ jobs:
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=20 \
-              release.tar.gz "$VPS_USER@$VPS_HOST:/tmp/release.tar.gz"; then
+              release.tar.gz "$VPS_USER@$VPS_HOST:release.tar.gz"; then
               echo "Upload succeeded"
               exit 0
             fi
@@ -102,7 +102,7 @@ jobs:
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         run: |
           set -euo pipefail
-          REMOTE_CMD='set -e; mkdir -p /var/www/detailflix; tar -xzf /tmp/release.tar.gz -C /var/www/detailflix; cd /var/www/detailflix; pm2 delete detailflix || true; pm2 start ecosystem.config.cjs --only detailflix; pm2 save'
+          REMOTE_CMD='set -e; mkdir -p /var/www/detailflix; tar -xzf ~/release.tar.gz -C /var/www/detailflix; cd /var/www/detailflix; pm2 delete detailflix || true; pm2 start ecosystem.config.cjs --only detailflix; pm2 save'
           for attempt in {1..6}; do
             echo "Remote deploy attempt ${attempt}/6"
             if sshpass -p "$VPS_PASSWORD" ssh \
