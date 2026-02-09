@@ -3,6 +3,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 
 const WORKSPACE_SCHEMA_BASELINE_TIMESTAMP = "20260207234745";
+const CUSTOMER_ATTACHMENTS_MIGRATION = "20260209094500_add_customer_country_and_attachments";
 
 function getWorkspaceDir(): string {
   return path.join(process.cwd(), "data", "workspaces");
@@ -72,6 +73,7 @@ function applyMigrations(db: Database.Database) {
         const timestamp = folder.slice(0, 14);
         if (timestamp <= WORKSPACE_SCHEMA_BASELINE_TIMESTAMP) {
           markStmt.run(folder, now);
+          applied.add(folder);
         }
       }
     });
@@ -84,6 +86,14 @@ function applyMigrations(db: Database.Database) {
   );
   for (const folder of migrationFolders) {
     if (applied.has(folder)) continue;
+
+    if (folder === CUSTOMER_ATTACHMENTS_MIGRATION) {
+      ensureCustomerCountryAndAttachmentsMigration(db);
+      markStmt.run(folder, new Date().toISOString());
+      applied.add(folder);
+      continue;
+    }
+
     const sqlPath = path.join(migrationsRoot, folder, "migration.sql");
     if (!fs.existsSync(sqlPath)) continue;
     const sql = fs.readFileSync(sqlPath, "utf8");
@@ -94,6 +104,42 @@ function applyMigrations(db: Database.Database) {
     db.exec(sql);
     markStmt.run(folder, new Date().toISOString());
   }
+}
+
+function ensureCustomerCountryAndAttachmentsMigration(db: Database.Database) {
+  const customerTable = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'Customer' LIMIT 1")
+    .get();
+
+  if (customerTable) {
+    const customerColumns = db.prepare("PRAGMA table_info('Customer')").all() as Array<{ name: string }>;
+    const customerColumnSet = new Set(customerColumns.map((col) => col.name));
+    if (!customerColumnSet.has("country")) {
+      db.exec('ALTER TABLE "Customer" ADD COLUMN "country" TEXT;');
+    }
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS "CustomerAttachment" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "customerId" TEXT NOT NULL,
+      "kind" TEXT NOT NULL DEFAULT 'GENERAL',
+      "title" TEXT NOT NULL,
+      "mimeType" TEXT NOT NULL,
+      "sizeBytes" INTEGER NOT NULL,
+      "storagePath" TEXT NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      CONSTRAINT "CustomerAttachment_customerId_fkey"
+        FOREIGN KEY ("customerId")
+        REFERENCES "Customer" ("id")
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+    );
+  `);
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS "CustomerAttachment_customerId_createdAt_idx" ON "CustomerAttachment"("customerId", "createdAt");'
+  );
 }
 
 function ensureCustomerIdentityColumns(db: Database.Database) {
@@ -157,8 +203,7 @@ function ensureDocumentVehicleSnapshotColumns(db: Database.Database) {
   }
 }
 
-export function ensureWorkspaceDatabase(workspaceId: string): string {
-  const dbPath = getWorkspaceDatabasePath(workspaceId);
+function ensureDatabaseAtPath(dbPath: string): string {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
   const db = new Database(dbPath, { timeout: 10_000 });
@@ -176,4 +221,36 @@ export function ensureWorkspaceDatabase(workspaceId: string): string {
   } finally {
     db.close();
   }
+}
+
+function resolveSqliteDatabasePath(databaseUrl: string): string {
+  const normalizedUrl = String(databaseUrl || "").trim();
+  if (!normalizedUrl) {
+    throw new Error("DATABASE_URL fehlt");
+  }
+  if (!normalizedUrl.startsWith("file:")) {
+    throw new Error("Nur SQLite-Dateien werden unterstuetzt (DATABASE_URL muss mit file: beginnen)");
+  }
+
+  const rawPathWithQuery = normalizedUrl.slice("file:".length);
+  const rawPath = rawPathWithQuery.split("?")[0];
+  const decodedPath = decodeURIComponent(rawPath).trim();
+
+  if (!decodedPath || decodedPath === ":memory:" || decodedPath === "memory:") {
+    throw new Error("In-Memory-SQLite wird hier nicht unterstuetzt");
+  }
+
+  if (path.isAbsolute(decodedPath)) return decodedPath;
+  if (decodedPath.startsWith("/")) return decodedPath;
+  return path.resolve(process.cwd(), decodedPath);
+}
+
+export function ensurePrimaryDatabase(databaseUrl: string = process.env.DATABASE_URL ?? "file:./dev.db"): string {
+  const dbPath = resolveSqliteDatabasePath(databaseUrl);
+  return ensureDatabaseAtPath(dbPath);
+}
+
+export function ensureWorkspaceDatabase(workspaceId: string): string {
+  const dbPath = getWorkspaceDatabasePath(workspaceId);
+  return ensureDatabaseAtPath(dbPath);
 }

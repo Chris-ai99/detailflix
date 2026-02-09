@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { getWorkspaceIdFromCookies } from "./auth";
-import { ensureWorkspaceDatabase, getWorkspaceDatabaseUrl } from "./tenant-db";
+import { ensurePrimaryDatabase, ensureWorkspaceDatabase, getWorkspaceDatabaseUrl } from "./tenant-db";
 
 type PrismaGlobal = {
   clients?: Map<string, PrismaClient>;
@@ -30,8 +30,11 @@ function getSharedClient(): PrismaClient {
   const existing = map.get(key);
   if (existing) return existing;
 
+  const sharedDatabaseUrl = process.env.DATABASE_URL ?? "file:./dev.db";
+  ensurePrimaryDatabase(sharedDatabaseUrl);
+
   const adapter = new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
+    url: sharedDatabaseUrl,
     timeout: 10_000,
   });
   const client = new PrismaClient({ adapter, log: ["error", "warn"] });
