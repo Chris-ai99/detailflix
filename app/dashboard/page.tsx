@@ -359,23 +359,23 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
           <img
             src="/detailix-wordmark.svg"
             alt="Autosello"
-            className="h-9 w-auto"
+            className="h-7 w-auto sm:h-9"
             loading="lazy"
           />
           <img
             src="/detailix-car.png"
             alt="Autosello Fahrzeug"
-            className="h-12 w-auto object-contain"
+            className="h-10 w-auto object-contain sm:h-12"
             loading="lazy"
           />
           <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Software</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <IconButton href="/settings" title="Einstellungen">{"\u2699"}</IconButton>
           <IconButton href="/profile" title="Profil">{"\uD83D\uDC64"}</IconButton>
         </div>
@@ -385,7 +385,7 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-12 md:col-span-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1">
             <QuickTile href="/orders" label={"Auftr\u00e4ge"} tone="olive" />
             <QuickTile href="/invoices" label="Rechnungen" tone="cyan" />
           </div>
@@ -440,23 +440,23 @@ export default async function DashboardPage() {
 
         <div className="col-span-12 lg:col-span-7">
           <Panel title={"Auftr\u00e4ge"} headerTone="blue" right={<span>{"Letzte Auftr\u00e4ge"}</span>}>
-            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
-              <div className="flex-1">
+            <div className="flex flex-col gap-3 border-b border-slate-800 pb-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="w-full flex-1">
                 <input
                   placeholder="Suchen"
                   className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200"
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex w-full gap-2 sm:w-auto">
                 <Link
                   href="/orders"
-                  className="rounded bg-slate-800 px-3 py-2 text-xs hover:bg-slate-700"
+                  className="flex-1 rounded bg-slate-800 px-3 py-2 text-center text-xs hover:bg-slate-700 sm:flex-none"
                 >
                   Liste
                 </Link>
                 <Link
                   href="/orders/new"
-                  className="rounded bg-cyan-600 px-3 py-2 text-xs text-white hover:bg-cyan-500"
+                  className="flex-1 rounded bg-cyan-600 px-3 py-2 text-center text-xs text-white hover:bg-cyan-500 sm:flex-none"
                 >
                   + Neu
                 </Link>
@@ -482,7 +482,7 @@ export default async function DashboardPage() {
                     key={order.id}
                     className="rounded border border-slate-700 bg-slate-800/60 p-3"
                   >
-                    <div className="grid grid-cols-[140px_1fr] gap-4 text-xs">
+                    <div className="grid gap-3 text-xs sm:grid-cols-[140px_1fr] sm:gap-4">
                       <div className="space-y-1 text-slate-400">
                         <div>Auftrag-ID</div>
                         <div>Kunde</div>
@@ -538,12 +538,12 @@ export default async function DashboardPage() {
         headerTone="olive"
         right={<span>Fahrzeuge Kunden: {vehiclesCount}</span>}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
+        <div className="flex flex-col gap-3 border-b border-slate-800 pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs text-slate-400">{"\u00dcbersicht"}</div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <input
               placeholder="Suchen"
-              className="w-48 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 sm:w-48"
             />
             <Link
               href="/vehicles"
@@ -553,8 +553,8 @@ export default async function DashboardPage() {
             </Link>
           </div>
         </div>
-        <div className="mt-3 rounded border border-slate-700 bg-slate-800/60">
-          <table className="w-full text-sm">
+        <div className="mt-3 overflow-x-auto rounded border border-slate-700 bg-slate-800/60">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="text-slate-300">
               <tr className="border-b border-slate-800">
                 <th className="p-3 text-left">#</th>

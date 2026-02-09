@@ -126,7 +126,7 @@ export default async function StornosPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/50 px-4 py-2 text-xs text-slate-200">
+      <div className="flex flex-col gap-2 rounded border border-slate-800 bg-slate-900/50 px-4 py-2 text-xs text-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <span>Stornos</span>
         </div>
@@ -134,32 +134,32 @@ export default async function StornosPage({
       </div>
 
       <div className="rounded border border-slate-800 bg-slate-800/60 p-3">
-        <form className="flex flex-wrap items-end gap-3" method="get">
-          <div>
+        <form className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" method="get">
+          <div className="w-full sm:w-auto">
             <label className="block text-[11px] text-slate-400">erstellt am</label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 type="date"
                 name="from"
                 defaultValue={fromRaw}
-                className="w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 sm:w-40"
               />
-              <span className="text-slate-500">{DASH}</span>
+              <span className="hidden text-slate-500 sm:inline">{DASH}</span>
               <input
                 type="date"
                 name="to"
                 defaultValue={toRaw}
-                className="w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 sm:w-40"
               />
             </div>
           </div>
 
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-[11px] text-slate-400">Status</label>
             <select
               name="status"
               defaultValue={statusFilter}
-              className="w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 sm:w-40"
             >
               <option value="all">Alle anzeigen</option>
               <option value="draft">Entwurf</option>
@@ -169,12 +169,12 @@ export default async function StornosPage({
             </select>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
             <input
               name="q"
               defaultValue={q}
               placeholder="Suchen"
-              className="w-56 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 sm:w-56"
             />
             <button
               type="submit"
@@ -186,8 +186,8 @@ export default async function StornosPage({
         </form>
       </div>
 
-      <div className="rounded border border-slate-800 bg-slate-800/60">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded border border-slate-800 bg-slate-800/60">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="text-slate-300">
             <tr className="border-b border-slate-700">
               <th className="p-3 text-left">#</th>

@@ -5,7 +5,7 @@ import { createVehicle } from "./serverActions";
 export default function NewVehiclePage() {
   return (
     <div className="max-w-2xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">Neues Fahrzeug</h1>
         <Link className="rounded px-3 py-2 hover:bg-slate-700/60" href="/vehicles">
           Zurück
@@ -16,7 +16,7 @@ export default function NewVehiclePage() {
         action={createVehicle}
         className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/60 p-6"
       >
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="VIN" name="vin" />
           <Field label="Baujahr" name="year" type="number" />
           <Field label="Marke" name="make" />

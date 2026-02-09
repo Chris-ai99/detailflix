@@ -80,6 +80,7 @@ function getDb(): Database.Database {
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  db.pragma("busy_timeout = 10000");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (

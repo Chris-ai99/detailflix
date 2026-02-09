@@ -448,7 +448,7 @@ export default function EditorClient({ doc }: { doc: any }) {
   }
 
   return (
-    <div className="grid grid-cols-[1fr_520px] gap-4">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_520px]">
       {/* LINKS: Wizard */}
       <div className="space-y-4">
         <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4">
@@ -522,7 +522,7 @@ export default function EditorClient({ doc }: { doc: any }) {
           {step === 1 && (
             <div className="p-4">
               <form action={saveBasics} className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm text-slate-300">
                       {doc.docType === "OFFER"
@@ -723,7 +723,7 @@ export default function EditorClient({ doc }: { doc: any }) {
               )}
               <div className="rounded border border-slate-700 bg-slate-800 p-3">
                 <div className="mb-3 text-sm font-semibold text-slate-300">Position</div>
-                <div className="grid grid-cols-[1fr_340px] gap-4">
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs text-slate-300">Suche nach Dienstleistungen</label>
@@ -1086,7 +1086,7 @@ export default function EditorClient({ doc }: { doc: any }) {
                 {doc.docType === "INVOICE" && (
                   <div className="rounded border border-slate-700 bg-slate-800 p-3">
                     <div className="text-sm font-semibold text-slate-300">Bezahlung</div>
-                    <div className="mt-3 grid grid-cols-[160px_1fr] gap-2">
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[160px_1fr]">
                       <input
                         type="date"
                         value={paidAtInput}
@@ -1494,7 +1494,7 @@ function Step2CustomerVehicle({
               Diese Rechnung ist bezahlt oder storniert und kann nicht mehr bearbeitet werden.
             </div>
           )}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-4">
+          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
             <div>
               <div className="mb-2 text-sm text-slate-300">Suche nach Kunden</div>
               <div className="flex gap-2">
@@ -1562,9 +1562,9 @@ function Step2CustomerVehicle({
               )}
             </div>
 
-            <div className="pt-8 text-center text-xs text-slate-400">— ODER —</div>
+            <div className="hidden pt-8 text-center text-xs text-slate-400 xl:block">— ODER —</div>
 
-            <div className="flex items-center justify-end pt-6">
+            <div className="flex items-center justify-start pt-2 xl:justify-end xl:pt-6">
               <label className="flex items-center gap-3 text-sm text-slate-300">
                 <span>Neuen Kunden anlegen</span>
                 <span className="relative inline-flex h-6 w-11 items-center">
@@ -1583,8 +1583,8 @@ function Step2CustomerVehicle({
           </div>
 
           {showCustomerCreate && (
-            <form action={submitNewCustomer} className="grid grid-cols-2 gap-2">
-              <label className="col-span-2 flex items-center gap-3 text-sm text-slate-300">
+            <form action={submitNewCustomer} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="flex items-center gap-3 text-sm text-slate-300 sm:col-span-2">
                 <span>Gewerbekunde</span>
                 <span className="relative inline-flex h-6 w-11 items-center">
                   <input
@@ -1604,14 +1604,14 @@ function Step2CustomerVehicle({
                 name="name"
                 placeholder={customerIsBusiness ? "Firma (optional)" : "Name *"}
                 disabled={disabled}
-                className="col-span-2 rounded bg-slate-900 p-2"
+                className="rounded bg-slate-900 p-2 sm:col-span-2"
                 required={!customerIsBusiness}
               />
               <input
                 name="street"
                 placeholder="Straße"
                 disabled={disabled}
-                className="col-span-2 rounded bg-slate-900 p-2"
+                className="rounded bg-slate-900 p-2 sm:col-span-2"
               />
               <input name="zip" placeholder="PLZ" disabled={disabled} className="rounded bg-slate-900 p-2" />
               <input name="city" placeholder="Ort" disabled={disabled} className="rounded bg-slate-900 p-2" />
@@ -1631,11 +1631,11 @@ function Step2CustomerVehicle({
                 name="vatId"
                 placeholder="USt-IdNr."
                 disabled={disabled}
-                className="col-span-2 rounded bg-slate-900 p-2"
+                className="rounded bg-slate-900 p-2 sm:col-span-2"
               />
 
               <button
-                className="col-span-2 rounded bg-cyan-700 px-3 py-2 disabled:opacity-50"
+                className="rounded bg-cyan-700 px-3 py-2 disabled:opacity-50 sm:col-span-2"
                 disabled={disabled}
                 type="submit"
               >
@@ -1644,7 +1644,7 @@ function Step2CustomerVehicle({
             </form>
           )}
 
-          <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-4">
+          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
             <div>
               <div className="mb-2 text-sm text-slate-300">Suche nach Fahrzeugen</div>
               <div className="flex gap-2">
@@ -1713,9 +1713,9 @@ function Step2CustomerVehicle({
               )}
             </div>
 
-            <div className="pt-8 text-center text-xs text-slate-400">— ODER —</div>
+            <div className="hidden pt-8 text-center text-xs text-slate-400 xl:block">— ODER —</div>
 
-            <div className="flex items-center justify-end pt-6">
+            <div className="flex items-center justify-start pt-2 xl:justify-end xl:pt-6">
               <button
                 type="button"
                 onClick={() => setShowVehicleCreate((v) => !v)}
@@ -1728,19 +1728,19 @@ function Step2CustomerVehicle({
           </div>
 
           {showVehicleCreate && currentCustomer && (
-            <form action={submitNewVehicle} className="grid grid-cols-2 gap-2">
+            <form action={submitNewVehicle} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <input name="make" placeholder="Marke" disabled={disabled} className="rounded bg-slate-900 p-2" />
               <input name="model" placeholder="Modell" disabled={disabled} className="rounded bg-slate-900 p-2" />
               <input
                 name="vin"
                 placeholder="Kennzeichen / VIN"
                 disabled={disabled}
-                className="col-span-2 rounded bg-slate-900 p-2"
+                className="rounded bg-slate-900 p-2 sm:col-span-2"
               />
               <input name="year" placeholder="Baujahr" disabled={disabled} className="rounded bg-slate-900 p-2" />
               <input name="mileage" placeholder="KM" disabled={disabled} className="rounded bg-slate-900 p-2" />
 
-              <div className="col-span-2 rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-400">
+              <div className="rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-400 sm:col-span-2">
                 {docType === "INVOICE"
                   ? "Für Händler: Mit 'Nur im Dokument' wird das Fahrzeug nicht im Kundenstamm gespeichert."
                   : "Sie können das Fahrzeug im Kundenstamm speichern oder nur im Dokument verwenden."}

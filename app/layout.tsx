@@ -10,9 +10,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="de">
       <body className="min-h-screen bg-slate-900 text-slate-100">
         {authenticated ? (
-          <div className="flex">
+          <div className="flex min-h-screen">
             <Sidebar />
-            <main className="flex-1 p-8">{children}</main>
+            <main className="min-w-0 flex-1 px-3 py-4 sm:px-4 sm:py-5 lg:px-8 lg:py-8">
+              {children}
+            </main>
           </div>
         ) : (
           children

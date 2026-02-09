@@ -161,9 +161,13 @@ export function ensureWorkspaceDatabase(workspaceId: string): string {
   const dbPath = getWorkspaceDatabasePath(workspaceId);
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-  const db = new Database(dbPath);
+  const db = new Database(dbPath, { timeout: 10_000 });
   try {
     db.pragma("foreign_keys = ON");
+    // Stabiler unter parallelen Reads/Writes (Sidebar, Listen, Uploads etc.).
+    db.pragma("journal_mode = WAL");
+    db.pragma("synchronous = NORMAL");
+    db.pragma("busy_timeout = 10000");
     applyMigrations(db);
     ensureCustomerIdentityColumns(db);
     ensureCustomerAttachmentVehicleColumn(db);

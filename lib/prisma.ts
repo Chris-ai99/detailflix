@@ -5,6 +5,7 @@ import { ensureWorkspaceDatabase, getWorkspaceDatabaseUrl } from "./tenant-db";
 
 type PrismaGlobal = {
   clients?: Map<string, PrismaClient>;
+  initializedWorkspaces?: Set<string>;
 };
 
 const globalForPrisma = globalThis as unknown as PrismaGlobal;
@@ -16,6 +17,13 @@ function getClientMap(): Map<string, PrismaClient> {
   return globalForPrisma.clients;
 }
 
+function getInitializedWorkspaceSet(): Set<string> {
+  if (!globalForPrisma.initializedWorkspaces) {
+    globalForPrisma.initializedWorkspaces = new Set<string>();
+  }
+  return globalForPrisma.initializedWorkspaces;
+}
+
 function getSharedClient(): PrismaClient {
   const map = getClientMap();
   const key = "__shared__";
@@ -24,6 +32,7 @@ function getSharedClient(): PrismaClient {
 
   const adapter = new PrismaBetterSqlite3({
     url: process.env.DATABASE_URL ?? "file:./dev.db",
+    timeout: 10_000,
   });
   const client = new PrismaClient({ adapter, log: ["error", "warn"] });
   map.set(key, client);
@@ -31,16 +40,21 @@ function getSharedClient(): PrismaClient {
 }
 
 function getWorkspaceClient(workspaceId: string): PrismaClient {
-  // Always ensure schema sync for existing workspace DBs before client usage.
-  ensureWorkspaceDatabase(workspaceId);
-
   const map = getClientMap();
   const key = `ws:${workspaceId}`;
   const existing = map.get(key);
   if (existing) return existing;
 
+  // Schema sync only once per workspace process lifetime.
+  const initialized = getInitializedWorkspaceSet();
+  if (!initialized.has(workspaceId)) {
+    ensureWorkspaceDatabase(workspaceId);
+    initialized.add(workspaceId);
+  }
+
   const adapter = new PrismaBetterSqlite3({
     url: getWorkspaceDatabaseUrl(workspaceId),
+    timeout: 10_000,
   });
   const client = new PrismaClient({ adapter, log: ["error", "warn"] });
   map.set(key, client);

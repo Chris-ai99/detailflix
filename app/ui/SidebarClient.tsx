@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 type CountKey =
   | "orders"
@@ -128,6 +129,7 @@ function MenuRow({
   href,
   placeholder,
   onToggle,
+  isOpen,
   className,
 }: MenuRowProps) {
   const body = (
@@ -148,6 +150,7 @@ function MenuRow({
             {count}
           </span>
         ) : null}
+        {onToggle ? <span className="text-xs text-slate-400">{isOpen ? "?" : "?"}</span> : null}
       </div>
     </div>
   );
@@ -195,8 +198,10 @@ function formatDuration(ms: number) {
 }
 
 export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
+  const pathname = usePathname();
   const [now, setNow] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -214,6 +219,10 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   const totalMs = useMemo(() => {
     if (!tracking || startedAt === null || !now) return elapsedMs;
     return elapsedMs + (now.getTime() - startedAt);
@@ -221,17 +230,26 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
 
   const duration = useMemo(() => formatDuration(totalMs), [totalMs]);
 
-  return (
-    <aside className="sticky top-0 h-screen w-64 bg-slate-800 border-r border-slate-700/60 flex flex-col">
-      <div className="p-4">
-        <div className="flex items-center">
-          <img src="/detailix-wordmark.svg" alt="Autosello" className="h-6 w-auto" />
+  const sidebarBody = (
+    <>
+      <div className="border-b border-slate-700/60 p-4">
+        <div className="flex items-center justify-between">
+          <Link href="/dashboard" className="inline-flex items-center">
+            <img src="/detailix-wordmark.svg" alt="Autosello" className="h-6 w-auto" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-200 lg:hidden"
+          >
+            Schliessen
+          </button>
         </div>
       </div>
 
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 pt-3">
         <div className="flex items-center justify-between text-base font-semibold text-slate-300">
-          <div className="font-mono" suppressHydrationWarning>
+          <div className="font-mono text-sm sm:text-base" suppressHydrationWarning>
             {mounted && now ? formatClock(now) : "\u2014"}
           </div>
           <div className="flex items-center gap-2">
@@ -250,14 +268,14 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
 
         {timeOpen && (
           <>
-            <div className="mt-4 grid grid-cols-3 gap-4 text-center">
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
               {[
                 { label: "Stunden", value: duration.hours },
                 { label: "Minuten", value: duration.minutes },
                 { label: "Sekunden", value: duration.seconds },
               ].map((t) => (
                 <div key={t.label}>
-                  <div className="rounded-full border border-slate-600/80 bg-slate-900/80 px-4 py-4 text-2xl font-semibold tracking-widest shadow-sm transition-all duration-200 font-mono">
+                  <div className="rounded-full border border-slate-600/80 bg-slate-900/80 px-3 py-3 text-xl font-semibold tracking-widest shadow-sm transition-all duration-200 font-mono sm:px-4 sm:py-4 sm:text-2xl">
                     {t.value}
                   </div>
                   <div className="mt-1 text-[11px] text-slate-400">{t.label}</div>
@@ -293,121 +311,122 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
           </>
         )}
       </div>
+
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 text-slate-200">
-        <div className="flex flex-col gap-1">
-        <Link href="/dashboard" className="rounded px-3 py-2 text-sm hover:bg-slate-700/60">
-          Dashboard
-        </Link>
+        <div className="flex flex-col gap-1 pb-4">
+          <Link href="/dashboard" className="rounded px-3 py-2 text-sm hover:bg-slate-700/60">
+            Dashboard
+          </Link>
 
-        <div className="mt-1 border-t border-slate-700/60 pt-2" />
+          <div className="mt-1 border-t border-slate-700/60 pt-2" />
 
-        <MenuRow label="Kunden anlegen" icon="users" href="/customers" count={counts.customers} />
-        <MenuRow
-          label="Angebot erstellen"
-          icon="tag"
-          href="/offers"
-          count={counts.offers}
-        />
-        <MenuRow label="Auftrag erstellen" icon="bolt" href="/orders" count={counts.orders} />
-        <MenuRow label="Termin erstellen" icon="calendar" placeholder />
-        <MenuRow
-          label="Rechnungen"
-          icon="receipt"
-          count={counts.invoices}
-          onToggle={() => setInvoicesOpen((v) => !v)}
-          isOpen={invoicesOpen}
-        />
-        {invoicesOpen && (
-          <div className="space-y-1">
-            <MenuRow
-              label="Rechnungen"
-              icon="receipt"
-              href="/invoices"
-              count={counts.invoices}
-              className="pl-8 text-xs"
-            />
-            <MenuRow
-              label="Gutschriften"
-              icon="receipt"
-              href="/credit-notes"
-              count={counts.creditNotes}
-              className="pl-8 text-xs"
-            />
-            <MenuRow
-              label="Stornos"
-              icon="receipt"
-              href="/stornos"
-              count={counts.stornos}
-              className="pl-8 text-xs"
-            />
-          </div>
-        )}
-        <MenuRow label="Leistungen" icon="tool" href="/services" count={counts.services} />
+          <MenuRow label="Kunden anlegen" icon="users" href="/customers" count={counts.customers} />
+          <MenuRow
+            label="Angebot erstellen"
+            icon="tag"
+            href="/offers"
+            count={counts.offers}
+          />
+          <MenuRow label="Auftrag erstellen" icon="bolt" href="/orders" count={counts.orders} />
+          <MenuRow label="Termin erstellen" icon="calendar" placeholder />
+          <MenuRow
+            label="Rechnungen"
+            icon="receipt"
+            count={counts.invoices}
+            onToggle={() => setInvoicesOpen((v) => !v)}
+            isOpen={invoicesOpen}
+          />
+          {invoicesOpen && (
+            <div className="space-y-1">
+              <MenuRow
+                label="Rechnungen"
+                icon="receipt"
+                href="/invoices"
+                count={counts.invoices}
+                className="pl-8 text-xs"
+              />
+              <MenuRow
+                label="Gutschriften"
+                icon="receipt"
+                href="/credit-notes"
+                count={counts.creditNotes}
+                className="pl-8 text-xs"
+              />
+              <MenuRow
+                label="Stornos"
+                icon="receipt"
+                href="/stornos"
+                count={counts.stornos}
+                className="pl-8 text-xs"
+              />
+            </div>
+          )}
+          <MenuRow label="Leistungen" icon="tool" href="/services" count={counts.services} />
 
-        <div className="mt-1 border-t border-slate-700/60 pt-2" />
+          <div className="mt-1 border-t border-slate-700/60 pt-2" />
 
-        <MenuRow
-          label="Coming Soon"
-          icon="chip"
-          onToggle={() => {
-            setComingSoonOpen((v) => {
-              const next = !v;
-              if (!next) setVehiclesSalesOpen(false);
-              return next;
-            });
-          }}
-          isOpen={comingSoonOpen}
-        />
-        {comingSoonOpen && (
-          <div className="space-y-1">
-            <MenuRow
-              label="E-Rechnung Mailbox"
-              icon="receipt"
-              placeholder
-              className="pl-8 text-xs"
-            />
-            <MenuRow
-              label="Fahrzeuge Kunden"
-              icon="car"
-              href="/vehicles"
-              count={counts.vehiclesCustomer}
-              className="pl-8 text-xs"
-            />
-            <MenuRow
-              label="Fahrzeug Verkauf"
-              icon="car"
-              count={vehiclesSalesTotal}
-              onToggle={() => setVehiclesSalesOpen((v) => !v)}
-              isOpen={vehiclesSalesOpen}
-              className="pl-8 text-xs"
-            />
-            {vehiclesSalesOpen && (
-              <div className="space-y-1">
-                <MenuRow
-                  label="Fahrzeuge Verkauf"
-                  icon="car"
-                  href="/vehicles/for-sale"
-                  count={counts.vehiclesForSale}
-                  className="pl-12 text-xs"
-                />
-                <MenuRow
-                  label="Fahrzeuge Archiv"
-                  icon="car"
-                  href="/vehicles/archive"
-                  count={counts.vehiclesArchive}
-                  className="pl-12 text-xs"
-                />
-              </div>
-            )}
-            <MenuRow label="Dellenkalkulation" icon="grid" placeholder className="pl-8 text-xs" />
-            <MenuRow label="Mitarbeiter" icon="users" placeholder className="pl-8 text-xs" />
-            <MenuRow label="Geraetemiete" icon="briefcase" placeholder className="pl-8 text-xs" />
-            <MenuRow label="APPs" icon="chip" placeholder className="pl-8 text-xs" />
-            <MenuRow label="Updates" icon="bell" placeholder className="pl-8 text-xs" />
-          </div>
-        )}
+          <MenuRow
+            label="Coming Soon"
+            icon="chip"
+            onToggle={() => {
+              setComingSoonOpen((v) => {
+                const next = !v;
+                if (!next) setVehiclesSalesOpen(false);
+                return next;
+              });
+            }}
+            isOpen={comingSoonOpen}
+          />
+          {comingSoonOpen && (
+            <div className="space-y-1">
+              <MenuRow
+                label="E-Rechnung Mailbox"
+                icon="receipt"
+                placeholder
+                className="pl-8 text-xs"
+              />
+              <MenuRow
+                label="Fahrzeuge Kunden"
+                icon="car"
+                href="/vehicles"
+                count={counts.vehiclesCustomer}
+                className="pl-8 text-xs"
+              />
+              <MenuRow
+                label="Fahrzeug Verkauf"
+                icon="car"
+                count={vehiclesSalesTotal}
+                onToggle={() => setVehiclesSalesOpen((v) => !v)}
+                isOpen={vehiclesSalesOpen}
+                className="pl-8 text-xs"
+              />
+              {vehiclesSalesOpen && (
+                <div className="space-y-1">
+                  <MenuRow
+                    label="Fahrzeuge Verkauf"
+                    icon="car"
+                    href="/vehicles/for-sale"
+                    count={counts.vehiclesForSale}
+                    className="pl-12 text-xs"
+                  />
+                  <MenuRow
+                    label="Fahrzeuge Archiv"
+                    icon="car"
+                    href="/vehicles/archive"
+                    count={counts.vehiclesArchive}
+                    className="pl-12 text-xs"
+                  />
+                </div>
+              )}
+              <MenuRow label="Dellenkalkulation" icon="grid" placeholder className="pl-8 text-xs" />
+              <MenuRow label="Mitarbeiter" icon="users" placeholder className="pl-8 text-xs" />
+              <MenuRow label="Geraetemiete" icon="briefcase" placeholder className="pl-8 text-xs" />
+              <MenuRow label="APPs" icon="chip" placeholder className="pl-8 text-xs" />
+              <MenuRow label="Updates" icon="bell" placeholder className="pl-8 text-xs" />
+            </div>
+          )}
 
-        <MenuRow label="Einstellungen" icon="gear" href="/settings" />
+          <MenuRow label="Einstellungen" icon="gear" href="/settings" />
         </div>
       </nav>
 
@@ -420,6 +439,49 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
           Abmelden
         </a>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <div className="sticky top-0 z-40 border-b border-slate-700/60 bg-slate-900/95 backdrop-blur lg:hidden">
+        <div className="flex items-center justify-between px-3 py-2">
+          <Link href="/dashboard" className="inline-flex items-center">
+            <img src="/detailix-wordmark.svg" alt="Autosello" className="h-6 w-auto" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            className="rounded border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-100"
+            aria-expanded={mobileOpen}
+            aria-label="Menue ein- oder ausklappen"
+          >
+            {mobileOpen ? "Schliessen" : "Menue"}
+          </button>
+        </div>
+      </div>
+
+      <div className={`fixed inset-0 z-50 lg:hidden ${mobileOpen ? "" : "pointer-events-none"}`}>
+        <button
+          type="button"
+          aria-label="Menue schliessen"
+          onClick={() => setMobileOpen(false)}
+          className={`absolute inset-0 bg-slate-950/65 transition-opacity ${
+            mobileOpen ? "opacity-100" : "opacity-0"
+          }`}
+        />
+        <aside
+          className={`absolute left-0 top-0 flex h-full w-[86vw] max-w-xs flex-col border-r border-slate-700/60 bg-slate-800 shadow-2xl transition-transform duration-200 ${
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          {sidebarBody}
+        </aside>
+      </div>
+
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-slate-700/60 bg-slate-800 lg:flex lg:flex-col">
+        {sidebarBody}
+      </aside>
+    </>
   );
 }

@@ -23,7 +23,7 @@ export default async function SettingsPage() {
 
       <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4">
         <form action={updateCompanySettings} encType="multipart/form-data" className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="col-span-2">
               <label className="block text-sm text-slate-300">Firmenname *</label>
               <input
@@ -101,7 +101,7 @@ export default async function SettingsPage() {
 
           <div className="rounded border border-slate-700 bg-slate-800 p-4">
             <div className="mb-3 text-sm font-semibold text-slate-200">Nummerierung</div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="col-span-2">
                 <label className="block text-sm text-slate-300">
                   Nächste Rechnungsnummer (laufende Nummer) – Jahr {year}
@@ -125,7 +125,7 @@ export default async function SettingsPage() {
 
           <div className="rounded border border-slate-700 bg-slate-800 p-4">
             <div className="mb-3 text-sm font-semibold text-slate-200">Bank & Rechtliches</div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="col-span-2">
                 <label className="block text-sm text-slate-300">Bank</label>
                 <input
@@ -190,7 +190,7 @@ export default async function SettingsPage() {
               <div className="mb-4 text-sm text-slate-400">Noch kein Logo hinterlegt.</div>
             )}
 
-            <div className="grid grid-cols-2 items-center gap-4">
+            <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
               <div className="col-span-2">
                 <label className="block text-sm text-slate-300">Logo hochladen (max. 2MB)</label>
                 <input
@@ -208,10 +208,10 @@ export default async function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
             <button
               type="submit"
-              className="rounded bg-cyan-700 px-4 py-2 text-sm font-medium hover:bg-cyan-600"
+              className="w-full rounded bg-cyan-700 px-4 py-2 text-sm font-medium hover:bg-cyan-600 sm:w-auto"
             >
               Speichern
             </button>

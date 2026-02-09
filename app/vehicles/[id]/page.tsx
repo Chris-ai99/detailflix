@@ -61,11 +61,11 @@ export default async function VehicleDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">
           Fahrzeug: {v.make ?? "-"} {v.model ?? ""}
         </h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link className="rounded px-3 py-2 hover:bg-slate-700/60" href="/vehicles">
             Zurueck
           </Link>
@@ -80,7 +80,7 @@ export default async function VehicleDetailPage({
       </div>
 
       <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-6">
-        <dl className="grid grid-cols-2 gap-4 text-sm">
+        <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           <Item label="Kennzeichen" value={v.vin ?? "-"} />
           <Item label="Baujahr" value={v.year?.toString() ?? "-"} />
           <Item label="Kilometer" value={v.mileage?.toString() ?? "-"} />
@@ -101,7 +101,7 @@ export default async function VehicleDetailPage({
       </div>
 
       <section id="fahrzeug-dokumente" className="rounded-lg border border-slate-700 bg-slate-800/60 p-6">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-slate-100">Fahrzeugdokumente</h2>
           <span className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-300">
             {v.attachments.length} Datei{v.attachments.length === 1 ? "" : "en"}

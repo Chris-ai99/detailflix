@@ -2,12 +2,12 @@
 
 export default function NewServicePage() {
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold mb-6">Dienstleistung anlegen</h1>
+    <div className="max-w-3xl space-y-4">
+      <h1 className="mb-6 text-2xl font-bold">Dienstleistung anlegen</h1>
 
       <form action={createService} className="bg-slate-900 p-4 rounded space-y-4">
         {/* Typ */}
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <span className="text-slate-300">Typ:</span>
 
           <label className="flex items-center gap-2">
@@ -22,7 +22,7 @@ export default function NewServicePage() {
         </div>
 
         {/* Basis */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <input
             name="name"
             placeholder="Bezeichnung (z.B. Handwäsche)"
@@ -40,7 +40,7 @@ export default function NewServicePage() {
         <div className="border border-slate-800 rounded p-3">
           <div className="text-slate-300 font-semibold mb-2">Arbeitswert (AW)</div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <input
               name="awDurationMinutes"
               placeholder="AW-Dauer (min) z.B. 60"
@@ -69,7 +69,7 @@ export default function NewServicePage() {
         <div className="border border-slate-800 rounded p-3">
           <div className="text-slate-300 font-semibold mb-2">Stundenlohn</div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <input
               name="hourlyRate"
               placeholder="Stundenlohn (z.B. 42,02)"
@@ -88,7 +88,7 @@ export default function NewServicePage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
             <input
               name="materialPercent"
               placeholder="Material % (optional) z.B. 10"
