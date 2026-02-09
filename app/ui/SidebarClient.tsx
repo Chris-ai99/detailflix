@@ -222,7 +222,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
   const duration = useMemo(() => formatDuration(totalMs), [totalMs]);
 
   return (
-    <aside className="w-64 bg-slate-800 min-h-screen border-r border-slate-700/60 flex flex-col">
+    <aside className="sticky top-0 h-screen w-64 bg-slate-800 border-r border-slate-700/60 flex flex-col">
       <div className="p-4">
         <div className="flex items-center">
           <img src="/detailix-wordmark.svg" alt="Autosello" className="h-6 w-auto" />
@@ -293,7 +293,8 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
           </>
         )}
       </div>
-      <nav className="flex flex-col gap-1 px-2 text-slate-200">
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2 text-slate-200">
+        <div className="flex flex-col gap-1">
         <Link href="/dashboard" className="rounded px-3 py-2 text-sm hover:bg-slate-700/60">
           Dashboard
         </Link>
@@ -318,12 +319,6 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
         />
         {invoicesOpen && (
           <div className="space-y-1">
-            <MenuRow
-              label="Rechnung erstellen"
-              icon="receipt"
-              href="/invoices/new"
-              className="pl-8 text-xs"
-            />
             <MenuRow
               label="Rechnungen"
               icon="receipt"
@@ -413,9 +408,10 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
         )}
 
         <MenuRow label="Einstellungen" icon="gear" href="/settings" />
+        </div>
       </nav>
 
-      <div className="mt-auto px-4 py-4 text-xs text-slate-300">
+      <div className="shrink-0 border-t border-slate-700/60 px-4 py-4 text-xs text-slate-300">
         <div className="text-cyan-300">Hilfe &amp; Service</div>
         <a
           href="/api/auth/logout"

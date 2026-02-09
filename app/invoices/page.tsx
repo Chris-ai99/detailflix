@@ -22,6 +22,20 @@ function formatMoney(cents?: number | null) {
   return (cents / 100).toFixed(2).replace(".", ",") + " \u20ac";
 }
 
+function formatVehicleLabel(input: {
+  vehicle?: { make?: string | null; model?: string | null; vin?: string | null } | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleVin?: string | null;
+}) {
+  const make = input.vehicle?.make ?? input.vehicleMake ?? "";
+  const model = input.vehicle?.model ?? input.vehicleModel ?? "";
+  const vin = input.vehicle?.vin ?? input.vehicleVin ?? "";
+  const makeModel = `${make} ${model}`.trim();
+  if (makeModel && vin) return `${makeModel} (${vin})`;
+  return makeModel || vin || DASH;
+}
+
 function StatusBadge({
   status,
   isFinal,
@@ -129,6 +143,10 @@ export default async function InvoicesPage({
       { customer: { name: { contains: q } } },
       { vehicle: { make: { contains: q } } },
       { vehicle: { model: { contains: q } } },
+      { vehicle: { vin: { contains: q } } },
+      { vehicleMake: { contains: q } },
+      { vehicleModel: { contains: q } },
+      { vehicleVin: { contains: q } },
     ];
   }
 
@@ -144,7 +162,10 @@ export default async function InvoicesPage({
         dueDate: true,
         sentAt: true,
         customer: { select: { name: true, isBusiness: true } },
-        vehicle: { select: { make: true, model: true } },
+        vehicle: { select: { make: true, model: true, vin: true } },
+        vehicleMake: true,
+        vehicleModel: true,
+        vehicleVin: true,
         grossTotalCents: true,
       },
   });
@@ -238,9 +259,7 @@ export default async function InvoicesPage({
             {invoices.map((inv, idx) => {
               const customerName =
                 inv.customer?.name || (inv.customer?.isBusiness ? "Gewerbekunde" : DASH);
-              const vehicleLabel = inv.vehicle
-                ? `${inv.vehicle.make ?? DASH} ${inv.vehicle.model ?? ""}`.trim()
-                : DASH;
+              const vehicleLabel = formatVehicleLabel(inv);
               const deletable = inv.status !== "PAID" && inv.status !== "CANCELLED";
               const viewHref = inv.isFinal ? `/documents/${inv.id}/view` : `/documents/${inv.id}/edit`;
 

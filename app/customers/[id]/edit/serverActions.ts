@@ -3,24 +3,46 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 
+function asNullable(value: FormDataEntryValue | null) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
 export async function updateCustomer(formData: FormData) {
   const id = String(formData.get("id") || "");
-  const nameRaw = String(formData.get("name") || "").trim();
-  if (!nameRaw) {
-    throw new Error("Name ist Pflicht");
+  const isBusiness = String(formData.get("isBusiness") || "0") === "1";
+  const companyNameRaw = String(formData.get("companyName") || "").trim();
+  const firstNameRaw = String(formData.get("firstName") || "").trim();
+  const lastNameRaw = String(formData.get("lastName") || "").trim();
+  const contactUseZh = isBusiness && String(formData.get("contactUseZh") || "") === "on";
+
+  if (isBusiness && !companyNameRaw) {
+    throw new Error("Unternehmensname ist Pflicht");
   }
+  if (!isBusiness && !firstNameRaw && !lastNameRaw) {
+    throw new Error("Vorname oder Nachname ist Pflicht");
+  }
+
   const countryRaw = String(formData.get("country") || "").trim();
+  const displayName = isBusiness
+    ? companyNameRaw
+    : [firstNameRaw, lastNameRaw].filter(Boolean).join(" ").trim();
 
   const data = {
-    name: nameRaw || null,
-    email: String(formData.get("email") || "") || null,
-    phone: String(formData.get("phone") || "") || null,
-    vatId: String(formData.get("vatId") || "") || null,
-    street: String(formData.get("street") || "") || null,
-    zip: String(formData.get("zip") || "") || null,
-    city: String(formData.get("city") || "") || null,
+    name: displayName || null,
+    isBusiness,
+    companyName: isBusiness ? companyNameRaw || null : null,
+    contactFirstName: firstNameRaw || null,
+    contactLastName: lastNameRaw || null,
+    contactUseZh,
+    email: asNullable(formData.get("email")),
+    phone: asNullable(formData.get("phone")),
+    vatId: asNullable(formData.get("vatId")),
+    street: asNullable(formData.get("street")),
+    zip: asNullable(formData.get("zip")),
+    city: asNullable(formData.get("city")),
     country: countryRaw || "Deutschland",
-    notes: String(formData.get("notes") || "") || null,
+    notes: asNullable(formData.get("notes")),
   };
 
   await prisma.customer.update({

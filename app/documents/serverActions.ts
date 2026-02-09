@@ -4,17 +4,114 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { DocumentStatus } from "@prisma/client";
 
+const CUSTOMER_SEARCH_SELECT = {
+  id: true,
+  name: true,
+  isBusiness: true,
+  companyName: true,
+  contactFirstName: true,
+  contactLastName: true,
+  contactUseZh: true,
+  email: true,
+  phone: true,
+  street: true,
+  zip: true,
+  city: true,
+  vatId: true,
+} as const;
+
+function normalizeDigits(value?: string | null) {
+  return (value || "").replace(/\D+/g, "");
+}
+
+function buildPhoneNeedles(rawQuery: string) {
+  const digits = normalizeDigits(rawQuery);
+  if (!digits) return [] as string[];
+
+  const needles = new Set<string>();
+  const baseVariants = new Set<string>([digits]);
+
+  if (digits.startsWith("00") && digits.length > 2) {
+    baseVariants.add(digits.slice(2));
+  }
+
+  for (const base of baseVariants) {
+    if (!base) continue;
+    needles.add(base);
+
+    if (base.startsWith("0") && base.length > 1) {
+      const withoutLeadingZero = base.slice(1);
+      if (withoutLeadingZero) needles.add(withoutLeadingZero);
+    }
+
+    for (let ccLength = 1; ccLength <= 3; ccLength += 1) {
+      if (base.length <= ccLength + 5) continue;
+      const local = base.slice(ccLength);
+      if (!local) continue;
+      needles.add(local);
+      needles.add(local.replace(/^0+/, ""));
+      if (!local.startsWith("0")) needles.add(`0${local}`);
+    }
+  }
+
+  return Array.from(needles).filter((item) => item.length >= 3);
+}
+
+function includesText(value: string | null | undefined, queryLower: string) {
+  return (value || "").toLowerCase().includes(queryLower);
+}
+
 function assertDocEditable(status: DocumentStatus) {
   if (status === DocumentStatus.PAID || status === DocumentStatus.CANCELLED) {
-    throw new Error("Bezahlte oder stornierte Dokumente können nicht mehr bearbeitet werden.");
+    throw new Error("Bezahlte oder stornierte Dokumente kÃ¶nnen nicht mehr bearbeitet werden.");
   }
+}
+
+type DocumentVehicleSnapshotInput = {
+  make?: string | null;
+  model?: string | null;
+  vin?: string | null;
+  mileage?: number | null;
+};
+
+function normalizeVehicleSnapshot(input: DocumentVehicleSnapshotInput) {
+  const make = String(input.make ?? "").trim() || null;
+  const model = String(input.model ?? "").trim() || null;
+  const vin = String(input.vin ?? "").trim() || null;
+  const mileageRaw = input.mileage;
+  const mileage =
+    typeof mileageRaw === "number" && Number.isFinite(mileageRaw)
+      ? Math.max(0, Math.trunc(mileageRaw))
+      : null;
+
+  const hasAny = Boolean(make || model || vin || mileage !== null);
+  return {
+    vehicleMake: hasAny ? make : null,
+    vehicleModel: hasAny ? model : null,
+    vehicleVin: hasAny ? vin : null,
+    vehicleMileage: hasAny ? mileage : null,
+  };
+}
+
+function getDocumentVehicleSnapshotData(source: {
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleVin?: string | null;
+  vehicleMileage?: number | null;
+}) {
+  return normalizeVehicleSnapshot({
+    make: source.vehicleMake ?? null,
+    model: source.vehicleModel ?? null,
+    vin: source.vehicleVin ?? null,
+    mileage: source.vehicleMileage ?? null,
+  });
 }
 
 /* -----------------------------------------
  * Kunden
  * ----------------------------------------- */
 
-// ✅ Kunden suchen (einfach & schnell)
+// âœ… Kunden suchen (einfach & schnell)
 export async function searchCustomers(query: string) {
   const q = (query ?? "").trim();
 
@@ -22,46 +119,71 @@ export async function searchCustomers(query: string) {
     return prisma.customer.findMany({
       take: 20,
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        isBusiness: true,
-        email: true,
-        phone: true,
-        street: true,
-        zip: true,
-        city: true,
-        vatId: true,
-      },
+      select: CUSTOMER_SEARCH_SELECT,
     });
   }
 
-  return prisma.customer.findMany({
-    take: 20,
-    where: {
-      OR: [
-        { name: { contains: q } },
-        { email: { contains: q } },
-        { phone: { contains: q } },
-        { city: { contains: q } },
-      ],
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      isBusiness: true,
-      email: true,
-      phone: true,
-      street: true,
-      zip: true,
-      city: true,
-      vatId: true,
-    },
+  const qLower = q.toLowerCase();
+  const phoneNeedles = buildPhoneNeedles(q);
+
+  const [textCandidates, phoneCandidates] = await Promise.all([
+    prisma.customer.findMany({
+      take: 120,
+      where: {
+        OR: [
+          { name: { contains: q } },
+          { companyName: { contains: q } },
+          { contactFirstName: { contains: q } },
+          { contactLastName: { contains: q } },
+          { email: { contains: q } },
+          { phone: { contains: q } },
+          { city: { contains: q } },
+          { vatId: { contains: q } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: CUSTOMER_SEARCH_SELECT,
+    }),
+    phoneNeedles.length
+      ? prisma.customer.findMany({
+          where: { phone: { not: null } },
+          orderBy: { createdAt: "desc" },
+          take: 500,
+          select: CUSTOMER_SEARCH_SELECT,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const merged = [...textCandidates, ...phoneCandidates];
+  const seen = new Set<string>();
+  const deduped = merged.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
   });
+
+  const filtered = deduped.filter((customer) => {
+    const textMatch =
+      includesText(customer.name, qLower) ||
+      includesText(customer.companyName, qLower) ||
+      includesText(customer.contactFirstName, qLower) ||
+      includesText(customer.contactLastName, qLower) ||
+      includesText(customer.email, qLower) ||
+      includesText(customer.phone, qLower) ||
+      includesText(customer.city, qLower) ||
+      includesText(customer.vatId, qLower);
+
+    if (textMatch) return true;
+    if (phoneNeedles.length === 0) return false;
+
+    const phoneDigits = normalizeDigits(customer.phone);
+    return phoneNeedles.some((needle) => phoneDigits.includes(needle));
+  });
+
+  return filtered.slice(0, 20);
 }
 
-// ✅ Kunden anlegen
+// âœ… Kunden anlegen
 export async function createCustomer(input: {
   name: string;
   isBusiness?: boolean;
@@ -96,7 +218,7 @@ export async function createCustomer(input: {
   return customer.id;
 }
 
-// ✅ Kunde ins Dokument setzen
+// âœ… Kunde ins Dokument setzen
 export async function setDocumentCustomer(documentId: string, customerId: string | null) {
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
@@ -107,7 +229,14 @@ export async function setDocumentCustomer(documentId: string, customerId: string
 
   await prisma.document.update({
     where: { id: documentId },
-    data: { customerId: customerId || null, vehicleId: null },
+    data: {
+      customerId: customerId || null,
+      vehicleId: null,
+      vehicleMake: null,
+      vehicleModel: null,
+      vehicleVin: null,
+      vehicleMileage: null,
+    },
   });
 
   revalidatePath(`/documents/${documentId}/edit`);
@@ -200,7 +329,40 @@ export async function setDocumentVehicle(documentId: string, vehicleId: string |
 
   await prisma.document.update({
     where: { id: documentId },
-    data: { vehicleId: vehicleId || null },
+    data: {
+      vehicleId: vehicleId || null,
+      vehicleMake: null,
+      vehicleModel: null,
+      vehicleVin: null,
+      vehicleMileage: null,
+    },
+  });
+
+  revalidatePath(`/documents/${documentId}/edit`);
+  revalidatePath("/invoices");
+  revalidatePath("/offers");
+  revalidatePath("/orders");
+  revalidatePath("/credit-notes");
+  revalidatePath("/stornos");
+}
+
+export async function setDocumentVehicleSnapshot(
+  documentId: string,
+  snapshot: DocumentVehicleSnapshotInput
+) {
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { status: true },
+  });
+  if (!doc) throw new Error("Dokument nicht gefunden");
+  assertDocEditable(doc.status);
+
+  await prisma.document.update({
+    where: { id: documentId },
+    data: {
+      vehicleId: null,
+      ...normalizeVehicleSnapshot(snapshot),
+    },
   });
 
   revalidatePath(`/documents/${documentId}/edit`);
@@ -212,7 +374,7 @@ export async function setDocumentVehicle(documentId: string, vehicleId: string |
 }
 
 /* -----------------------------------------
- * Dokumente (Draft → Update → Final / Toggle)
+ * Dokumente (Draft â†’ Update â†’ Final / Toggle)
  * ----------------------------------------- */
 
 function formatDocNumber(
@@ -275,6 +437,28 @@ export async function createDraftDocument(
   return doc.id;
 }
 
+export async function createDraftDocumentForCustomer(
+  docType: "OFFER" | "INVOICE" | "PURCHASE_CONTRACT",
+  customerId?: string | null
+) {
+  const id = await createDraftDocument(docType);
+  const normalizedCustomerId = String(customerId || "").trim();
+  if (!normalizedCustomerId) return id;
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: normalizedCustomerId },
+    select: { id: true },
+  });
+  if (!customer) return id;
+
+  await prisma.document.update({
+    where: { id },
+    data: { customerId: normalizedCustomerId },
+  });
+
+  return id;
+}
+
 // 2) Draft updaten (Allgemeine Daten)
 export async function updateDocumentBasics(input: {
   id: string;
@@ -318,7 +502,7 @@ export async function updateDocumentBasics(input: {
     data: {
       ...rest,
       ...(offerType ? { offerType } : {}),
-      // issueDate ist nicht nullable -> bei ungültigem Wert NICHT überschreiben
+      // issueDate ist nicht nullable -> bei ungÃ¼ltigem Wert NICHT Ã¼berschreiben
       issueDate: parsedIssueDate instanceof Date ? parsedIssueDate : undefined,
       serviceDate: parsedServiceDate,
       dueDate: parsedDueDate,
@@ -336,7 +520,7 @@ export async function updateDocumentBasics(input: {
 }
 
 /**
- * 3a) Finalisieren (einmalig) – bleibt drin, falls du es irgendwo verwendest
+ * 3a) Finalisieren (einmalig) â€“ bleibt drin, falls du es irgendwo verwendest
  */
 export async function finalizeDocument(id: string) {
   const doc = await prisma.document.findUnique({
@@ -383,9 +567,9 @@ export async function finalizeDocument(id: string) {
 }
 
 /**
- * 3b) 🔥 Toggle Entwurf ⇄ Final (wie du es willst)
+ * 3b) ðŸ”¥ Toggle Entwurf â‡„ Final (wie du es willst)
  * - Entwurf -> Final: zieht Nummer, falls noch keine echte vorhanden
- * - Final -> Entwurf: macht isFinal=false, Nummer bleibt reserviert (kein Counter zurück!)
+ * - Final -> Entwurf: macht isFinal=false, Nummer bleibt reserviert (kein Counter zurÃ¼ck!)
  */
 export async function toggleFinalizeDocument(id: string) {
   const doc = await prisma.document.findUnique({
@@ -398,7 +582,7 @@ export async function toggleFinalizeDocument(id: string) {
   // FINAL -> ENTWURF
   if (doc.isFinal) {
     if (doc.status === DocumentStatus.PAID || doc.status === DocumentStatus.CANCELLED) {
-      throw new Error("Bezahlte oder stornierte Dokumente können nicht zurückgesetzt werden.");
+      throw new Error("Bezahlte oder stornierte Dokumente kÃ¶nnen nicht zurÃ¼ckgesetzt werden.");
     }
     let fallbackDraft = doc.draftNumber;
     if (!fallbackDraft) {
@@ -476,12 +660,12 @@ export async function toggleFinalizeDocument(id: string) {
 }
 
 /* -----------------------------------------
- * Dokument-Verwaltung (Löschen / Storno)
+ * Dokument-Verwaltung (LÃ¶schen / Storno)
  * ----------------------------------------- */
 
 /**
- * ✅ Löschen: Draft UND Final (so wie du es willst)
- * Achtung: Nummernkreis wird NICHT zurückgesetzt -> Lücken sind normal.
+ * âœ… LÃ¶schen: Draft UND Final (so wie du es willst)
+ * Achtung: Nummernkreis wird NICHT zurÃ¼ckgesetzt -> LÃ¼cken sind normal.
  */
 export async function deleteDocument(id: string) {
   const exists = await prisma.document.findUnique({
@@ -491,11 +675,11 @@ export async function deleteDocument(id: string) {
 
   if (!exists) return;
   if (exists.status === DocumentStatus.PAID || exists.status === DocumentStatus.CANCELLED) {
-    throw new Error("Bezahlte oder stornierte Dokumente dürfen nicht gelöscht werden.");
+    throw new Error("Bezahlte oder stornierte Dokumente dÃ¼rfen nicht gelÃ¶scht werden.");
   }
 
   await prisma.$transaction(async (tx) => {
-    // Lines löschen (falls du DocumentLine hast)
+    // Lines lÃ¶schen (falls du DocumentLine hast)
     await tx.documentLine.deleteMany({ where: { documentId: id } });
     await tx.document.delete({ where: { id } });
   });
@@ -516,8 +700,8 @@ export async function convertOfferToInvoice(offerId: string) {
   });
 
   if (!offer) throw new Error("Angebot nicht gefunden");
-  if (offer.docType !== "OFFER") throw new Error("Nur Angebote können umgewandelt werden.");
-  if (!offer.isFinal) throw new Error("Nur finale Angebote können umgewandelt werden.");
+  if (offer.docType !== "OFFER") throw new Error("Nur Angebote kÃ¶nnen umgewandelt werden.");
+  if (!offer.isFinal) throw new Error("Nur finale Angebote kÃ¶nnen umgewandelt werden.");
   if (offer.status === DocumentStatus.CONVERTED) {
     throw new Error("Angebot wurde bereits umgewandelt.");
   }
@@ -547,6 +731,7 @@ export async function convertOfferToInvoice(offerId: string) {
       serviceDate: issueDate,
       customerId: offer.customerId,
       vehicleId: offer.vehicleId,
+      ...getDocumentVehicleSnapshotData(offer),
       sourceOfferId: offer.id,
     },
     select: { id: true },
@@ -605,7 +790,7 @@ export async function convertOfferToInvoice(offerId: string) {
 }
 
 /**
- * Optional: Storno für Final (wenn du es später doch brauchst)
+ * Optional: Storno fÃ¼r Final (wenn du es spÃ¤ter doch brauchst)
  */
 export async function cancelFinalDocument(id: string) {
   const doc = await prisma.document.findUnique({
@@ -614,11 +799,11 @@ export async function cancelFinalDocument(id: string) {
   });
 
   if (!doc) throw new Error("Dokument nicht gefunden");
-  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen können storniert werden.");
+  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen kÃ¶nnen storniert werden.");
   if (!doc.isFinal) throw new Error("Nur finale Dokumente werden storniert.");
   if (doc.status === DocumentStatus.CANCELLED) return;
   if (doc.status !== DocumentStatus.PAID) {
-    throw new Error("Nur bezahlte Rechnungen können storniert werden.");
+    throw new Error("Nur bezahlte Rechnungen kÃ¶nnen storniert werden.");
   }
 
   await prisma.document.update({
@@ -637,13 +822,13 @@ export async function setDocumentPaid(id: string, paidAt: Date | string | null) 
   });
 
   if (!doc) throw new Error("Dokument nicht gefunden");
-  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen können bezahlt werden.");
-  if (!doc.isFinal) throw new Error("Nur finale Rechnungen können bezahlt werden.");
+  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen kÃ¶nnen bezahlt werden.");
+  if (!doc.isFinal) throw new Error("Nur finale Rechnungen kÃ¶nnen bezahlt werden.");
   if (doc.status === DocumentStatus.CANCELLED) {
-    throw new Error("Stornierte Rechnungen können nicht bezahlt werden.");
+    throw new Error("Stornierte Rechnungen kÃ¶nnen nicht bezahlt werden.");
   }
   if (doc.status === DocumentStatus.PAID && paidAt === null) {
-    throw new Error("Bezahlte Rechnungen können nicht auf unbezahlt gesetzt werden.");
+    throw new Error("Bezahlte Rechnungen kÃ¶nnen nicht auf unbezahlt gesetzt werden.");
   }
 
   const parseDate = (value: Date | string | null) => {
@@ -674,13 +859,13 @@ export async function setDocumentSent(id: string) {
   });
 
   if (!doc) throw new Error("Dokument nicht gefunden");
-  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen kÃ¶nnen versendet werden.");
-  if (!doc.isFinal) throw new Error("Nur finale Rechnungen kÃ¶nnen versendet werden.");
+  if (doc.docType !== "INVOICE") throw new Error("Nur Rechnungen kÃƒÂ¶nnen versendet werden.");
+  if (!doc.isFinal) throw new Error("Nur finale Rechnungen kÃƒÂ¶nnen versendet werden.");
   if (doc.status === DocumentStatus.CANCELLED) {
-    throw new Error("Stornierte Rechnungen kÃ¶nnen nicht versendet werden.");
+    throw new Error("Stornierte Rechnungen kÃƒÂ¶nnen nicht versendet werden.");
   }
   if (doc.status === DocumentStatus.PAID) {
-    throw new Error("Bezahlte Rechnungen mÃ¼ssen nicht mehr versendet werden.");
+    throw new Error("Bezahlte Rechnungen mÃƒÂ¼ssen nicht mehr versendet werden.");
   }
   if (doc.status === DocumentStatus.SENT && doc.sentAt) return;
 
@@ -699,7 +884,7 @@ export async function createCreditNoteFromInvoice(input: {
   lines: { lineId: string; qty: number }[];
 }) {
   const { invoiceId, lines } = input;
-  if (!lines || lines.length === 0) throw new Error("Keine Positionen ausgewählt.");
+  if (!lines || lines.length === 0) throw new Error("Keine Positionen ausgewÃ¤hlt.");
 
   const invoice = await prisma.document.findUnique({
     where: { id: invoiceId },
@@ -707,10 +892,10 @@ export async function createCreditNoteFromInvoice(input: {
   });
 
   if (!invoice) throw new Error("Rechnung nicht gefunden");
-  if (invoice.docType !== "INVOICE") throw new Error("Nur Rechnungen können gutgeschrieben werden.");
-  if (!invoice.isFinal) throw new Error("Nur finale Rechnungen können gutgeschrieben werden.");
+  if (invoice.docType !== "INVOICE") throw new Error("Nur Rechnungen kÃ¶nnen gutgeschrieben werden.");
+  if (!invoice.isFinal) throw new Error("Nur finale Rechnungen kÃ¶nnen gutgeschrieben werden.");
   if (invoice.status !== DocumentStatus.PAID) {
-    throw new Error("Nur bezahlte Rechnungen können gutgeschrieben werden.");
+    throw new Error("Nur bezahlte Rechnungen kÃ¶nnen gutgeschrieben werden.");
   }
 
   const lineMap = new Map(invoice.lines.map((l) => [l.id, l]));
@@ -724,7 +909,7 @@ export async function createCreditNoteFromInvoice(input: {
     })
     .filter(Boolean) as { source: any; qty: number }[];
 
-  if (selected.length === 0) throw new Error("Keine gültigen Positionen ausgewählt.");
+  if (selected.length === 0) throw new Error("Keine gÃ¼ltigen Positionen ausgewÃ¤hlt.");
 
   const year = new Date().getFullYear();
   const draftCounter = await prisma.documentDraftCounter.upsert({
@@ -745,6 +930,7 @@ export async function createCreditNoteFromInvoice(input: {
       issueDate: new Date(),
       customerId: invoice.customerId,
       vehicleId: invoice.vehicleId,
+      ...getDocumentVehicleSnapshotData(invoice),
       creditForId: invoice.id,
     },
     select: { id: true },
@@ -804,13 +990,13 @@ export async function createStornoFromInvoice(input: { invoiceId: string }) {
   });
 
   if (!invoice) throw new Error("Rechnung nicht gefunden");
-  if (invoice.docType !== "INVOICE") throw new Error("Nur Rechnungen können storniert werden.");
-  if (!invoice.isFinal) throw new Error("Nur finale Rechnungen können storniert werden.");
+  if (invoice.docType !== "INVOICE") throw new Error("Nur Rechnungen kÃ¶nnen storniert werden.");
+  if (!invoice.isFinal) throw new Error("Nur finale Rechnungen kÃ¶nnen storniert werden.");
   if (invoice.status === DocumentStatus.CANCELLED) {
     throw new Error("Rechnung ist bereits storniert.");
   }
   if (invoice.status !== DocumentStatus.PAID) {
-    throw new Error("Nur bezahlte Rechnungen können storniert werden.");
+    throw new Error("Nur bezahlte Rechnungen kÃ¶nnen storniert werden.");
   }
 
   const year = new Date().getFullYear();
@@ -832,6 +1018,7 @@ export async function createStornoFromInvoice(input: { invoiceId: string }) {
       issueDate: new Date(),
       customerId: invoice.customerId,
       vehicleId: invoice.vehicleId,
+      ...getDocumentVehicleSnapshotData(invoice),
       creditForId: invoice.id,
     },
     select: { id: true },
@@ -949,7 +1136,7 @@ async function recalcDocumentTotalsTx(tx: any, documentId: string) {
 }
 
 /**
- * Services suchen für Autocomplete
+ * Services suchen fÃ¼r Autocomplete
  */
 export async function searchServices(query: string) {
   const q = query.trim();
@@ -1122,7 +1309,7 @@ export async function addLineFromService(documentId: string, serviceId: string) 
     });
     if (!service) throw new Error("Service not found");
 
-    // nächste Position
+    // nÃ¤chste Position
     const last = await tx.documentLine.aggregate({
       where: { documentId },
       _max: { position: true },
@@ -1281,7 +1468,7 @@ export async function updateDocumentLine(
     title?: string;              // optional
     description?: string | null; // optional
     quantity?: number;           // UI -> qty
-    unitPrice?: number;          // € (brutto) -> unitNetCents
+    unitPrice?: number;          // â‚¬ (brutto) -> unitNetCents
     discount?: number;           // %    -> discountPct
     vatRate?: number;            // %
     isMarginScheme?: boolean;
@@ -1372,7 +1559,7 @@ export async function updateDocumentLine(
 }
 
 /**
- * Line löschen
+ * Line lÃ¶schen
  */
 export async function deleteDocumentLine(lineId: string) {
   const line = await prisma.documentLine.findUnique({
@@ -1390,7 +1577,7 @@ export async function deleteDocumentLine(lineId: string) {
     assertDocEditable(doc.status);
 
     await tx.documentLine.delete({ where: { id: lineId } });
-    // Nach dem Löschen Positionen neu nummerieren, damit keine Lücken entstehen.
+    // Nach dem LÃ¶schen Positionen neu nummerieren, damit keine LÃ¼cken entstehen.
     const remaining = await tx.documentLine.findMany({
       where: { documentId: line.documentId },
       orderBy: { position: "asc" },
@@ -1409,3 +1596,4 @@ export async function deleteDocumentLine(lineId: string) {
 
   revalidatePath(`/documents/${line.documentId}/edit`);
 }
+

@@ -24,10 +24,28 @@ type MembershipRow = {
   role: "OWNER" | "MEMBER";
 };
 
+type AccessRequestRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  workspace_name: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  created_at: string;
+  updated_at: string;
+};
+
 type RegistrationTokenRow = {
   token: string;
   email: string;
   password_hash: string;
+  full_name: string | null;
+  workspace_name: string;
+  expires_at: string;
+};
+
+type AccessInviteTokenRow = {
+  token: string;
+  email: string;
   full_name: string | null;
   workspace_name: string;
   expires_at: string;
@@ -38,6 +56,8 @@ type PasswordResetTokenRow = {
   user_id: string;
   expires_at: string;
 };
+
+const REGISTRATION_TOKEN_TTL_MS = 1000 * 60 * 60 * 24;
 
 function nowIso() {
   return new Date().toISOString();
@@ -115,6 +135,17 @@ function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_access_requests_email_status
       ON access_requests(email, status);
+
+    CREATE TABLE IF NOT EXISTS access_invite_tokens (
+      token TEXT PRIMARY KEY,
+      access_request_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(access_request_id) REFERENCES access_requests(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_access_invite_tokens_request_id
+      ON access_invite_tokens(access_request_id);
 
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       token TEXT PRIMARY KEY,
@@ -200,6 +231,115 @@ export function createAccessRequest(input: {
   return id;
 }
 
+export function findAccessRequestById(requestId: string): {
+  id: string;
+  email: string;
+  fullName: string | null;
+  workspaceName: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+} | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      "SELECT id, email, full_name, workspace_name, status, created_at, updated_at FROM access_requests WHERE id = ? LIMIT 1"
+    )
+    .get(requestId) as AccessRequestRow | undefined;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    workspaceName: row.workspace_name,
+    status: row.status,
+  };
+}
+
+export function findPendingAccessRequestById(requestId: string): {
+  id: string;
+  email: string;
+  fullName: string | null;
+  workspaceName: string;
+} | null {
+  const row = findAccessRequestById(requestId);
+  if (!row || row.status !== "PENDING") {
+    return null;
+  }
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.fullName,
+    workspaceName: row.workspaceName,
+  };
+}
+
+export function markAccessRequestApproved(requestId: string): boolean {
+  const db = getDb();
+  const result = db
+    .prepare(
+      "UPDATE access_requests SET status = 'APPROVED', updated_at = ? WHERE id = ? AND status = 'PENDING'"
+    )
+    .run(nowIso(), requestId);
+  return result.changes > 0;
+}
+
+export function createAccessInviteToken(accessRequestId: string): string {
+  const db = getDb();
+  const token = crypto.randomUUID().replaceAll("-", "");
+  const now = nowIso();
+  const expiresAt = new Date(Date.now() + REGISTRATION_TOKEN_TTL_MS).toISOString();
+
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM access_invite_tokens WHERE access_request_id = ?").run(accessRequestId);
+    db.prepare(
+      "INSERT INTO access_invite_tokens (token, access_request_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
+    ).run(token, accessRequestId, expiresAt, now);
+  });
+
+  tx();
+  return token;
+}
+
+export function consumeAccessInviteToken(token: string): {
+  email: string;
+  fullName: string | null;
+  workspaceName: string;
+} | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `
+      SELECT
+        t.token,
+        r.email,
+        r.full_name,
+        r.workspace_name,
+        t.expires_at
+      FROM access_invite_tokens t
+      INNER JOIN access_requests r ON r.id = t.access_request_id
+      WHERE t.token = ? AND r.status = 'APPROVED'
+      LIMIT 1
+    `
+    )
+    .get(token) as AccessInviteTokenRow | undefined;
+
+  if (!row) return null;
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    db.prepare("DELETE FROM access_invite_tokens WHERE token = ?").run(token);
+    return null;
+  }
+
+  db.prepare("DELETE FROM access_invite_tokens WHERE token = ?").run(token);
+  return {
+    email: row.email,
+    fullName: row.full_name,
+    workspaceName: row.workspace_name,
+  };
+}
+
 export function createRegistrationToken(input: {
   email: string;
   passwordHash: string;
@@ -209,7 +349,7 @@ export function createRegistrationToken(input: {
   const db = getDb();
   const token = crypto.randomUUID().replaceAll("-", "");
   const now = nowIso();
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+  const expiresAt = new Date(Date.now() + REGISTRATION_TOKEN_TTL_MS).toISOString();
 
   const tx = db.transaction(() => {
     db.prepare("DELETE FROM registration_tokens WHERE lower(email) = lower(?)").run(input.email);

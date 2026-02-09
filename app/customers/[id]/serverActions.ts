@@ -10,12 +10,10 @@ import {
   storeCustomerAttachmentFile,
 } from "@/lib/customer-attachments";
 
-const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_KINDS = new Set([
   "GENERAL",
   "VEHICLE_REGISTRATION",
-  "PRIVACY_AGREEMENT_UNSIGNED",
-  "PRIVACY_AGREEMENT_SIGNED",
 ]);
 
 function assertAttachmentKind(kind: string): CustomerAttachmentKind {
@@ -55,7 +53,7 @@ export async function uploadCustomerAttachment(formData: FormData) {
     throw new Error("Datei ist leer");
   }
   if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    throw new Error("Datei ist zu gross (max. 10 MB)");
+    throw new Error("Datei ist zu gross (max. 20 MB)");
   }
 
   const customer = await prisma.customer.findUnique({
@@ -65,6 +63,22 @@ export async function uploadCustomerAttachment(formData: FormData) {
   if (!customer) throw new Error("Kunde nicht gefunden");
 
   const kind = assertAttachmentKind(String(formData.get("kind") || "GENERAL").trim());
+  const vehicleIdRaw = String(formData.get("vehicleId") || "").trim();
+  let vehicleId: string | null = null;
+  if (vehicleIdRaw) {
+    const vehicle = await prisma.vehicle.findFirst({
+      where: { id: vehicleIdRaw, customerId },
+      select: { id: true },
+    });
+    if (!vehicle) {
+      throw new Error("Fahrzeug fuer diesen Kunden nicht gefunden.");
+    }
+    vehicleId = vehicle.id;
+  }
+  if (kind === "VEHICLE_REGISTRATION" && !vehicleId) {
+    throw new Error("Bitte Fahrzeug fuer den Fahrzeugschein auswaehlen.");
+  }
+
   const titleRaw = String(formData.get("title") || "").trim();
   const content = Buffer.from(await file.arrayBuffer());
   const { storagePath, fileName } = await storeCustomerAttachmentFile({
@@ -82,6 +96,7 @@ export async function uploadCustomerAttachment(formData: FormData) {
       mimeType: file.type || "application/octet-stream",
       sizeBytes: file.size,
       storagePath,
+      vehicleId,
     },
   });
 
@@ -108,5 +123,53 @@ export async function deleteCustomerAttachment(formData: FormData) {
   await deleteAttachmentFile(item.storagePath);
 
   revalidatePath(`/customers/${customerId}`);
+  redirect(`/customers/${customerId}`);
+}
+
+function parseIntOrNull(value: FormDataEntryValue | null) {
+  if (value === null) return null;
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.trunc(parsed);
+}
+
+export async function createCustomerVehicle(formData: FormData) {
+  const customerId = String(formData.get("customerId") || "").trim();
+  if (!customerId) throw new Error("Kunde fehlt");
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true },
+  });
+  if (!customer) throw new Error("Kunde nicht gefunden");
+
+  const make = String(formData.get("make") || "").trim() || null;
+  const model = String(formData.get("model") || "").trim() || null;
+  const licensePlate = String(formData.get("licensePlate") || "").trim() || null;
+  const notes = String(formData.get("notes") || "").trim() || null;
+  const mileage = parseIntOrNull(formData.get("mileage"));
+
+  if (!make && !model && !licensePlate) {
+    throw new Error("Bitte mindestens Marke, Modell oder Kennzeichen eingeben.");
+  }
+
+  await prisma.vehicle.create({
+    data: {
+      vin: licensePlate,
+      make,
+      model,
+      mileage,
+      notes,
+      isStock: false,
+      isForSale: false,
+      isSold: false,
+      customerId,
+    },
+  });
+
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/vehicles");
   redirect(`/customers/${customerId}`);
 }

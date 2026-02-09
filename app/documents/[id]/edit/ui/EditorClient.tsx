@@ -13,6 +13,7 @@ import {
   searchVehicles,
   createVehicle,
   setDocumentVehicle,
+  setDocumentVehicleSnapshot,
   searchServices,
   searchStockVehicles,
   addCustomLine,
@@ -688,6 +689,7 @@ export default function EditorClient({ doc }: { doc: any }) {
         {/* Schritt 2 */}
         <Step2CustomerVehicle
           documentId={doc.id}
+          docType={doc.docType}
           currentCustomer={doc.customer}
           currentVehicle={doc.vehicle}
           locked={isLocked}
@@ -1261,6 +1263,7 @@ export default function EditorClient({ doc }: { doc: any }) {
 
 function Step2CustomerVehicle({
   documentId,
+  docType,
   currentCustomer,
   currentVehicle,
   locked,
@@ -1271,6 +1274,7 @@ function Step2CustomerVehicle({
   onPrev,
 }: {
   documentId: string;
+  docType: string;
   currentCustomer: any;
   currentVehicle: any;
   locked: boolean;
@@ -1295,6 +1299,14 @@ function Step2CustomerVehicle({
   const [vehicleResults, setVehicleResults] = useState<any[]>([]);
   const [showVehicleResults, setShowVehicleResults] = useState(false);
   const [showVehicleCreate, setShowVehicleCreate] = useState(false);
+
+  function formatVehicleHeaderLabel(vehicle: any) {
+    if (!vehicle) return "";
+    const makeModel = `${vehicle.make ?? ""} ${vehicle.model ?? ""}`.trim();
+    const vin = String(vehicle.vin ?? "").trim();
+    if (makeModel && vin) return `${makeModel} (${vin})`;
+    return makeModel || vin || "Fahrzeug";
+  }
 
   // Kunden suchen (debounced light)
   useEffect(() => {
@@ -1350,10 +1362,9 @@ function Step2CustomerVehicle({
       return;
     }
 
-    const makeModel = `${currentVehicle.make ?? ""} ${currentVehicle.model ?? ""}`.trim();
-    const label = makeModel || (currentVehicle.vin ? `VIN: ${currentVehicle.vin}` : "Fahrzeug");
+    const label = formatVehicleHeaderLabel(currentVehicle);
     setVehicleQuery(label);
-  }, [currentVehicle?.id]);
+  }, [currentVehicle?.id, currentVehicle?.make, currentVehicle?.model, currentVehicle?.vin]);
 
   function pickCustomer(id: string) {
     if (locked) return;
@@ -1428,6 +1439,7 @@ function Step2CustomerVehicle({
     const make = String(formData.get("make") ?? "").trim() || null;
     const model = String(formData.get("model") ?? "").trim() || null;
     const vin = String(formData.get("vin") ?? "").trim() || null;
+    const saveMode = String(formData.get("saveMode") ?? "persist").trim();
 
     const yearRaw = String(formData.get("year") ?? "").trim();
     const year = yearRaw ? Number(yearRaw) : null;
@@ -1436,15 +1448,24 @@ function Step2CustomerVehicle({
     const mileage = mileageRaw ? Number(mileageRaw) : null;
 
     startTransition(async () => {
-      const newId = await createVehicle({
-        make,
-        model,
-        vin,
-        year: year !== null && Number.isFinite(year) ? year : null,
-        mileage: mileage !== null && Number.isFinite(mileage) ? mileage : null,
-        customerId: currentCustomer?.id ?? null,
-      });
-      await setDocumentVehicle(documentId, newId);
+      if (saveMode === "document-only") {
+        await setDocumentVehicleSnapshot(documentId, {
+          make,
+          model,
+          vin,
+          mileage: mileage !== null && Number.isFinite(mileage) ? mileage : null,
+        });
+      } else {
+        const newId = await createVehicle({
+          make,
+          model,
+          vin,
+          year: year !== null && Number.isFinite(year) ? year : null,
+          mileage: mileage !== null && Number.isFinite(mileage) ? mileage : null,
+          customerId: currentCustomer?.id ?? null,
+        });
+        await setDocumentVehicle(documentId, newId);
+      }
       setShowVehicleCreate(false);
       setVehicleQuery("");
       onChanged();
@@ -1462,7 +1483,7 @@ function Step2CustomerVehicle({
         <span className="text-xs text-slate-400">
           {currentCustomer?.name ||
             (currentCustomer?.isBusiness ? "Gewerbekunde" : "Kein Kunde")}{" "}
-          {currentVehicle ? `• ${currentVehicle.make ?? ""} ${currentVehicle.model ?? ""}` : ""}
+          {currentVehicle ? `• ${formatVehicleHeaderLabel(currentVehicle)}` : ""}
         </span>
       </button>
 
@@ -1712,19 +1733,36 @@ function Step2CustomerVehicle({
               <input name="model" placeholder="Modell" disabled={disabled} className="rounded bg-slate-900 p-2" />
               <input
                 name="vin"
-                placeholder="VIN"
+                placeholder="Kennzeichen / VIN"
                 disabled={disabled}
                 className="col-span-2 rounded bg-slate-900 p-2"
               />
               <input name="year" placeholder="Baujahr" disabled={disabled} className="rounded bg-slate-900 p-2" />
               <input name="mileage" placeholder="KM" disabled={disabled} className="rounded bg-slate-900 p-2" />
 
+              <div className="col-span-2 rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-400">
+                {docType === "INVOICE"
+                  ? "Für Händler: Mit 'Nur im Dokument' wird das Fahrzeug nicht im Kundenstamm gespeichert."
+                  : "Sie können das Fahrzeug im Kundenstamm speichern oder nur im Dokument verwenden."}
+              </div>
+
               <button
-                className="col-span-2 rounded bg-cyan-700 px-3 py-2 disabled:opacity-50"
+                className="rounded bg-cyan-700 px-3 py-2 disabled:opacity-50"
                 disabled={disabled}
                 type="submit"
+                name="saveMode"
+                value="persist"
               >
-                Fahrzeug speichern &amp; auswählen
+                Speichern &amp; auswählen
+              </button>
+              <button
+                className="rounded border border-slate-600 bg-slate-800 px-3 py-2 disabled:opacity-50"
+                disabled={disabled}
+                type="submit"
+                name="saveMode"
+                value="document-only"
+              >
+                Nur im Dokument übernehmen
               </button>
             </form>
           )}

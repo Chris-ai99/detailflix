@@ -15,6 +15,8 @@ function isPublicPath(pathname: string): boolean {
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
     pathname === "/api/auth/register/start" ||
+    pathname === "/api/auth/register/approve" ||
+    pathname === "/api/auth/register/complete" ||
     pathname === "/api/auth/register/verify" ||
     pathname === "/api/auth/password/forgot" ||
     pathname === "/api/auth/password/reset" ||

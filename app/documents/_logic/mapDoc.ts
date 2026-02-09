@@ -63,6 +63,19 @@ export function mapLineToView(l: DocumentLine): EditorLineVM {
 }
 
 export function mapDocumentToView(doc: any): EditorDocVM {
+  const fallbackVehicle =
+    doc.vehicle ??
+    (doc.vehicleMake || doc.vehicleModel || doc.vehicleVin || doc.vehicleMileage != null
+      ? {
+          id: null,
+          make: doc.vehicleMake ?? null,
+          model: doc.vehicleModel ?? null,
+          vin: doc.vehicleVin ?? null,
+          mileage: doc.vehicleMileage ?? null,
+          isDocumentOnly: true,
+        }
+      : null);
+
   return {
     id: doc.id,
     docType: doc.docType,
@@ -80,7 +93,7 @@ export function mapDocumentToView(doc: any): EditorDocVM {
     notesPublic: doc.notesPublic ?? null,
     notesInternal: doc.notesInternal ?? null,
     customer: doc.customer ?? null,
-    vehicle: doc.vehicle ?? null,
+    vehicle: fallbackVehicle,
     totals: {
       net: fromCents(doc.netTotalCents ?? 0),
       vat: fromCents(doc.vatTotalCents ?? 0),

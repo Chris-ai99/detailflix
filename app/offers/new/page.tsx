@@ -1,7 +1,14 @@
 import { redirect } from "next/navigation";
-import { createDraftDocument } from "@/app/documents/serverActions";
+import { createDraftDocumentForCustomer } from "@/app/documents/serverActions";
 
-export default async function NewOfferPage() {
-  const id = await createDraftDocument("OFFER");
+export default async function NewOfferPage({
+  searchParams,
+}: {
+  searchParams?: { customerId?: string } | Promise<{ customerId?: string }>;
+}) {
+  const resolved = searchParams ? await searchParams : undefined;
+  const customerId = String(resolved?.customerId || "").trim() || null;
+
+  const id = await createDraftDocumentForCustomer("OFFER", customerId);
   redirect(`/documents/${id}/edit`);
 }

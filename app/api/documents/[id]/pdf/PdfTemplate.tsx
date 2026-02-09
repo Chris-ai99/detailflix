@@ -286,7 +286,15 @@ export function buildEpcQrPayload(
 export function buildPdfDocument(doc: any, company: CompanyProfile, qrDataUrl?: string) {
   const customerName =
     doc.customer?.name || (doc.customer?.isBusiness ? "Gewerbekunde" : "-");
-  const vehicleLabel = (doc.vehicle?.make ?? "-") + " " + (doc.vehicle?.model ?? "");
+  const vehicleMake = doc.vehicle?.make ?? doc.vehicleMake ?? "";
+  const vehicleModel = doc.vehicle?.model ?? doc.vehicleModel ?? "";
+  const vehicleVin = doc.vehicle?.vin ?? doc.vehicleVin ?? "";
+  const vehicleMakeModel = `${vehicleMake} ${vehicleModel}`.trim();
+  const vehicleLabel = vehicleMakeModel
+    ? vehicleVin
+      ? `${vehicleMakeModel} (${vehicleVin})`
+      : vehicleMakeModel
+    : vehicleVin || "";
   const zipCity = formatZipCity(company);
 
   const lines = ([...(doc.lines ?? [])] as any[]).sort(

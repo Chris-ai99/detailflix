@@ -326,7 +326,10 @@ export default async function DashboardPage() {
         deliveryDate: true,
         grossTotalCents: true,
         customer: { select: { id: true, name: true, isBusiness: true } },
-        vehicle: { select: { id: true, make: true, model: true } },
+        vehicle: { select: { id: true, make: true, model: true, vin: true } },
+        vehicleMake: true,
+        vehicleModel: true,
+        vehicleVin: true,
       },
     }),
     prisma.vehicle.findMany({
@@ -464,9 +467,15 @@ export default async function DashboardPage() {
               {recentOrders.map((order) => {
                 const customerName =
                   order.customer?.name || (order.customer?.isBusiness ? "Gewerbekunde" : "\u2014");
-                const vehicleLabel = order.vehicle
-                  ? `${order.vehicle.make ?? "\u2014"} ${order.vehicle.model ?? ""}`.trim()
-                  : "\u2014";
+                const vehicleMake = order.vehicle?.make ?? order.vehicleMake ?? "";
+                const vehicleModel = order.vehicle?.model ?? order.vehicleModel ?? "";
+                const vehicleVin = order.vehicle?.vin ?? order.vehicleVin ?? "";
+                const vehicleMakeModel = `${vehicleMake} ${vehicleModel}`.trim();
+                const vehicleLabel = vehicleMakeModel
+                  ? vehicleVin
+                    ? `${vehicleMakeModel} (${vehicleVin})`
+                    : vehicleMakeModel
+                  : vehicleVin || "\u2014";
 
                 return (
                   <div

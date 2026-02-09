@@ -31,12 +31,14 @@ function getSharedClient(): PrismaClient {
 }
 
 function getWorkspaceClient(workspaceId: string): PrismaClient {
+  // Always ensure schema sync for existing workspace DBs before client usage.
+  ensureWorkspaceDatabase(workspaceId);
+
   const map = getClientMap();
   const key = `ws:${workspaceId}`;
   const existing = map.get(key);
   if (existing) return existing;
 
-  ensureWorkspaceDatabase(workspaceId);
   const adapter = new PrismaBetterSqlite3({
     url: getWorkspaceDatabaseUrl(workspaceId),
   });

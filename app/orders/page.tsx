@@ -4,16 +4,32 @@ import DeleteOrderButton from "./ui/DeleteOrderButton";
 
 export const dynamic = "force-dynamic";
 
+const DASH = "-";
+
 function formatDate(value?: Date | string | null) {
-  if (!value) return "—";
+  if (!value) return DASH;
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return DASH;
   return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function formatMoney(cents?: number | null) {
-  if (typeof cents !== "number") return "—";
-  return (cents / 100).toFixed(2).replace(".", ",") + " €";
+  if (typeof cents !== "number") return DASH;
+  return (cents / 100).toFixed(2).replace(".", ",") + " EUR";
+}
+
+function formatVehicleLabel(input: {
+  vehicle?: { make?: string | null; model?: string | null; vin?: string | null } | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleVin?: string | null;
+}) {
+  const make = input.vehicle?.make ?? input.vehicleMake ?? "";
+  const model = input.vehicle?.model ?? input.vehicleModel ?? "";
+  const vin = input.vehicle?.vin ?? input.vehicleVin ?? "";
+  const makeModel = `${make} ${model}`.trim();
+  if (makeModel && vin) return `${makeModel} (${vin})`;
+  return makeModel || vin || DASH;
 }
 
 function StatusBadge({ isFinal }: { isFinal: boolean }) {
@@ -102,6 +118,10 @@ export default async function OrdersPage({
       { customer: { name: { contains: q } } },
       { vehicle: { make: { contains: q } } },
       { vehicle: { model: { contains: q } } },
+      { vehicle: { vin: { contains: q } } },
+      { vehicleMake: { contains: q } },
+      { vehicleModel: { contains: q } },
+      { vehicleVin: { contains: q } },
     ];
   }
 
@@ -117,7 +137,10 @@ export default async function OrdersPage({
       deliveryDate: true,
       grossTotalCents: true,
       customer: { select: { name: true, isBusiness: true } },
-      vehicle: { select: { make: true, model: true } },
+      vehicle: { select: { make: true, model: true, vin: true } },
+      vehicleMake: true,
+      vehicleModel: true,
+      vehicleVin: true,
     },
   });
 
@@ -125,7 +148,7 @@ export default async function OrdersPage({
     <div className="space-y-4">
       <div className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/50 px-4 py-2 text-xs text-slate-200">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <span>Meine Aufträge</span>
+          <span>Meine Auftraege</span>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -148,7 +171,7 @@ export default async function OrdersPage({
                 defaultValue={fromRaw}
                 className="w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
               />
-              <span className="text-slate-500">–</span>
+              <span className="text-slate-500">{DASH}</span>
               <input
                 type="date"
                 name="to"
@@ -205,10 +228,8 @@ export default async function OrdersPage({
           <tbody>
             {orders.map((order, idx) => {
               const customerName =
-                order.customer?.name || (order.customer?.isBusiness ? "Gewerbekunde" : "—");
-              const vehicleLabel = order.vehicle
-                ? `${order.vehicle.make ?? "—"} ${order.vehicle.model ?? ""}`.trim()
-                : "—";
+                order.customer?.name || (order.customer?.isBusiness ? "Gewerbekunde" : DASH);
+              const vehicleLabel = formatVehicleLabel(order);
               const showDelete = !order.isFinal;
 
               return (
@@ -227,7 +248,7 @@ export default async function OrdersPage({
                   </td>
                   <td className="p-3 text-right">
                     <div className="flex justify-end gap-2">
-                      <ActionLink href={`/documents/${order.id}/edit`} title="Öffnen" tone="cyan">
+                      <ActionLink href={`/documents/${order.id}/edit`} title="Oeffnen" tone="cyan">
                         <IconSearch />
                       </ActionLink>
                       <ActionLink href={`/api/documents/${order.id}/pdf`} title="PDF" tone="indigo">
@@ -243,7 +264,7 @@ export default async function OrdersPage({
             {orders.length === 0 && (
               <tr>
                 <td className="p-6 text-slate-400" colSpan={8}>
-                  Noch keine Aufträge vorhanden.
+                  Noch keine Auftraege vorhanden.
                 </td>
               </tr>
             )}

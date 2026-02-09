@@ -96,6 +96,67 @@ function applyMigrations(db: Database.Database) {
   }
 }
 
+function ensureCustomerIdentityColumns(db: Database.Database) {
+  const customerTable = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'Customer' LIMIT 1")
+    .get();
+  if (!customerTable) return;
+
+  const columns = db.prepare("PRAGMA table_info('Customer')").all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((col) => col.name));
+
+  if (!existing.has("companyName")) {
+    db.exec('ALTER TABLE "Customer" ADD COLUMN "companyName" TEXT;');
+  }
+  if (!existing.has("contactFirstName")) {
+    db.exec('ALTER TABLE "Customer" ADD COLUMN "contactFirstName" TEXT;');
+  }
+  if (!existing.has("contactLastName")) {
+    db.exec('ALTER TABLE "Customer" ADD COLUMN "contactLastName" TEXT;');
+  }
+  if (!existing.has("contactUseZh")) {
+    db.exec('ALTER TABLE "Customer" ADD COLUMN "contactUseZh" BOOLEAN NOT NULL DEFAULT 0;');
+  }
+}
+
+function ensureCustomerAttachmentVehicleColumn(db: Database.Database) {
+  const attachmentTable = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'CustomerAttachment' LIMIT 1")
+    .get();
+  if (!attachmentTable) return;
+
+  const columns = db.prepare("PRAGMA table_info('CustomerAttachment')").all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((col) => col.name));
+
+  if (!existing.has("vehicleId")) {
+    db.exec('ALTER TABLE "CustomerAttachment" ADD COLUMN "vehicleId" TEXT;');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS "CustomerAttachment_vehicleId_idx" ON "CustomerAttachment"("vehicleId");');
+}
+
+function ensureDocumentVehicleSnapshotColumns(db: Database.Database) {
+  const documentTable = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'Document' LIMIT 1")
+    .get();
+  if (!documentTable) return;
+
+  const columns = db.prepare("PRAGMA table_info('Document')").all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((col) => col.name));
+
+  if (!existing.has("vehicleMake")) {
+    db.exec('ALTER TABLE "Document" ADD COLUMN "vehicleMake" TEXT;');
+  }
+  if (!existing.has("vehicleModel")) {
+    db.exec('ALTER TABLE "Document" ADD COLUMN "vehicleModel" TEXT;');
+  }
+  if (!existing.has("vehicleVin")) {
+    db.exec('ALTER TABLE "Document" ADD COLUMN "vehicleVin" TEXT;');
+  }
+  if (!existing.has("vehicleMileage")) {
+    db.exec('ALTER TABLE "Document" ADD COLUMN "vehicleMileage" INTEGER;');
+  }
+}
+
 export function ensureWorkspaceDatabase(workspaceId: string): string {
   const dbPath = getWorkspaceDatabasePath(workspaceId);
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -104,6 +165,9 @@ export function ensureWorkspaceDatabase(workspaceId: string): string {
   try {
     db.pragma("foreign_keys = ON");
     applyMigrations(db);
+    ensureCustomerIdentityColumns(db);
+    ensureCustomerAttachmentVehicleColumn(db);
+    ensureDocumentVehicleSnapshotColumns(db);
     return dbPath;
   } finally {
     db.close();

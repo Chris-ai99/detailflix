@@ -1,5 +1,7 @@
 import nodemailer from "nodemailer";
 
+const ACCESS_REQUEST_RECIPIENT = "info@autoaufbereitung-bi.de";
+
 function getMailConfig() {
   const host = (process.env.SMTP_HOST ?? "").trim();
   const port = Number(process.env.SMTP_PORT ?? "587");
@@ -29,7 +31,7 @@ function getTransport() {
 }
 
 function getAccessRequestRecipient(): string {
-  return (process.env.ACCESS_REQUEST_TO ?? process.env.MAIL_FROM ?? "").trim();
+  return ACCESS_REQUEST_RECIPIENT;
 }
 
 export async function sendRegistrationMail(params: {
@@ -63,6 +65,7 @@ export async function sendAccessRequestMail(params: {
   requesterEmail: string;
   requesterName: string | null;
   workspaceName: string;
+  approveUrl: string;
 }) {
   const cfg = getMailConfig();
   const to = getAccessRequestRecipient();
@@ -82,7 +85,42 @@ export async function sendAccessRequestMail(params: {
       `Name: ${params.requesterName || "-"}`,
       `Firmen-/Kontoname: ${params.workspaceName}`,
       ``,
-      `Bitte Konto manuell freigeben/anlegen.`,
+      `Freigabe starten (erzeugt einen Registrierungslink, 24h gueltig):`,
+      params.approveUrl,
+      ``,
+      `Danach kannst du den erzeugten Link an die anfragende Person weiterleiten.`,
+    ].join("\n"),
+  });
+}
+
+export async function sendAccessApprovalMail(params: {
+  requesterEmail: string;
+  requesterName: string | null;
+  workspaceName: string;
+  registrationUrl: string;
+}) {
+  const cfg = getMailConfig();
+  const to = getAccessRequestRecipient();
+  if (!isMailConfigured() || !to) {
+    throw new Error("MAIL_NOT_CONFIGURED");
+  }
+
+  const transporter = getTransport();
+  await transporter.sendMail({
+    from: cfg.from,
+    to,
+    subject: "Freigabe-Link erstellt (24h gueltig)",
+    text: [
+      `Die Freigabe wurde erstellt und ist ab jetzt 24 Stunden gueltig.`,
+      ``,
+      `E-Mail: ${params.requesterEmail}`,
+      `Name: ${params.requesterName || "-"}`,
+      `Firmen-/Kontoname: ${params.workspaceName}`,
+      ``,
+      `Diesen Link an die anfragende Person weiterleiten:`,
+      params.registrationUrl,
+      ``,
+      `Hinweis: Der Link laeuft nach 24 Stunden automatisch ab.`,
     ].join("\n"),
   });
 }

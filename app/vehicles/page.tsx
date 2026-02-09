@@ -101,6 +101,7 @@ export default async function VehiclesPage({
       year: true,
       createdAt: true,
       customer: { select: { name: true, isBusiness: true } },
+      _count: { select: { attachments: true } },
     },
   });
 
@@ -168,6 +169,7 @@ export default async function VehiclesPage({
               <th className="p-3 text-left">VIN</th>
               <th className="p-3 text-left">KM</th>
               <th className="p-3 text-left">Baujahr</th>
+              <th className="p-3 text-left">Dokumente</th>
               <th className="p-3 text-left">erstellt am</th>
               <th className="p-3 text-right">Aktionen</th>
             </tr>
@@ -185,6 +187,14 @@ export default async function VehiclesPage({
                   <td className="p-3 text-slate-200">{v.vin ?? DASH}</td>
                   <td className="p-3 text-slate-200">{v.mileage ?? DASH}</td>
                   <td className="p-3 text-slate-200">{v.year ?? DASH}</td>
+                  <td className="p-3 text-slate-200">
+                    <Link
+                      href={`/vehicles/${v.id}#fahrzeug-dokumente`}
+                      className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                    >
+                      {v._count.attachments} Datei{v._count.attachments === 1 ? "" : "en"}
+                    </Link>
+                  </td>
                   <td className="p-3 text-slate-300">{formatDate(v.createdAt)}</td>
                   <td className="p-3 text-right">
                     <div className="flex justify-end gap-2">
@@ -203,7 +213,7 @@ export default async function VehiclesPage({
 
             {vehicles.length === 0 && (
               <tr>
-                <td className="p-6 text-slate-400" colSpan={8}>
+                <td className="p-6 text-slate-400" colSpan={9}>
                   Noch keine Fahrzeuge vorhanden.
                 </td>
               </tr>

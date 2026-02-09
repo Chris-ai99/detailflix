@@ -20,6 +20,20 @@ function formatMoney(cents?: number | null) {
   return (cents / 100).toFixed(2).replace(".", ",") + " \u20ac";
 }
 
+function formatVehicleLabel(input: {
+  vehicle?: { make?: string | null; model?: string | null; vin?: string | null } | null;
+  vehicleMake?: string | null;
+  vehicleModel?: string | null;
+  vehicleVin?: string | null;
+}) {
+  const make = input.vehicle?.make ?? input.vehicleMake ?? "";
+  const model = input.vehicle?.model ?? input.vehicleModel ?? "";
+  const vin = input.vehicle?.vin ?? input.vehicleVin ?? "";
+  const makeModel = `${make} ${model}`.trim();
+  if (makeModel && vin) return `${makeModel} (${vin})`;
+  return makeModel || vin || DASH;
+}
+
 function StatusBadge({ isFinal, status }: { isFinal: boolean; status: string }) {
   if (status === "CONVERTED") {
     return <span className="text-xs text-cyan-300">Umgewandelt</span>;
@@ -126,6 +140,10 @@ export default async function OffersPage({
       { customer: { name: { contains: q } } },
       { vehicle: { make: { contains: q } } },
       { vehicle: { model: { contains: q } } },
+      { vehicle: { vin: { contains: q } } },
+      { vehicleMake: { contains: q } },
+      { vehicleModel: { contains: q } },
+      { vehicleVin: { contains: q } },
     ];
   }
 
@@ -141,7 +159,10 @@ export default async function OffersPage({
       validUntil: true,
       grossTotalCents: true,
       customer: { select: { name: true, isBusiness: true } },
-      vehicle: { select: { make: true, model: true } },
+      vehicle: { select: { make: true, model: true, vin: true } },
+      vehicleMake: true,
+      vehicleModel: true,
+      vehicleVin: true,
     },
   });
 
@@ -231,9 +252,7 @@ export default async function OffersPage({
             {offers.map((offer, idx) => {
               const customerName =
                 offer.customer?.name || (offer.customer?.isBusiness ? "Gewerbekunde" : DASH);
-              const vehicleLabel = offer.vehicle
-                ? `${offer.vehicle.make ?? DASH} ${offer.vehicle.model ?? ""}`.trim()
-                : DASH;
+              const vehicleLabel = formatVehicleLabel(offer);
               const showConvert = offer.isFinal && offer.status !== "CONVERTED";
               const showDelete = !offer.isFinal && offer.status !== "CONVERTED";
 

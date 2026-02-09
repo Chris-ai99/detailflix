@@ -10,6 +10,10 @@ model Customer {
   id     String  @id @default(cuid())
   name   String?
   isBusiness Boolean @default(false)
+  companyName String?
+  contactFirstName String?
+  contactLastName String?
+  contactUseZh Boolean @default(false)
   email  String?
   phone  String?
   vatId  String?
@@ -31,6 +35,8 @@ model CustomerAttachment {
   id         String   @id @default(cuid())
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vehicleId  String?
+  vehicle    Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
 
   kind       CustomerAttachmentKind @default(GENERAL)
   title      String
@@ -42,6 +48,7 @@ model CustomerAttachment {
   updatedAt DateTime @updatedAt
 
   @@index([customerId, createdAt])
+  @@index([vehicleId])
 }
 
 model CompanySettings {
@@ -118,6 +125,7 @@ model Vehicle {
 
   documents Document[]
   customer  Customer? @relation(fields: [customerId], references: [id])
+  attachments CustomerAttachment[]
 }
 
 model DocumentDraftCounter {
@@ -158,6 +166,10 @@ model Document {
 
   customerId String?
   vehicleId  String?
+  vehicleMake String?
+  vehicleModel String?
+  vehicleVin String?
+  vehicleMileage Int?
   creditForId String?
   sourceOfferId String?
 

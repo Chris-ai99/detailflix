@@ -10,6 +10,19 @@ export async function getVehicle(id: string | undefined) {
 
   const v = await prisma.vehicle.findUnique({
     where: { id },
+    include: {
+      attachments: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          customerId: true,
+          kind: true,
+          title: true,
+          sizeBytes: true,
+          createdAt: true,
+        },
+      },
+    },
   });
 
   if (!v) notFound();

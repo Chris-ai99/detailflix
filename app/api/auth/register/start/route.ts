@@ -31,17 +31,21 @@ export async function POST(req: NextRequest) {
     return redirectToRegister(req, "already");
   }
 
-  createAccessRequest({
+  const requestId = createAccessRequest({
     email,
     fullName,
     workspaceName,
   });
+
+  const approveUrl = new URL("/api/auth/register/approve", getPublicBaseUrl(req));
+  approveUrl.searchParams.set("requestId", requestId);
 
   try {
     await sendAccessRequestMail({
       requesterEmail: email,
       requesterName: fullName,
       workspaceName,
+      approveUrl: approveUrl.toString(),
     });
   } catch {
     return redirectToRegister(req, "mail");
