@@ -65,26 +65,56 @@ jobs:
           cp ecosystem.config.cjs release/ecosystem.config.cjs
           tar -czf release.tar.gz -C release .
 
-      - name: Upload bundle to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          password: ${{ secrets.VPS_PASSWORD }}
-          source: release.tar.gz
-          target: /tmp
+      - name: Install sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
 
-      - name: Deploy on VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          password: ${{ secrets.VPS_PASSWORD }}
-          script: |
-            set -e
-            mkdir -p /var/www/detailflix
-            tar -xzf /tmp/release.tar.gz -C /var/www/detailflix
-            cd /var/www/detailflix
-            pm2 delete detailflix || true
-            pm2 start ecosystem.config.cjs --only detailflix
-            pm2 save
+      - name: Upload bundle to VPS (retry)
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..6}; do
+            echo "SCP upload attempt ${attempt}/6"
+            if sshpass -p "$VPS_PASSWORD" scp \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=20 \
+              release.tar.gz "$VPS_USER@$VPS_HOST:/tmp/release.tar.gz"; then
+              echo "Upload succeeded"
+              exit 0
+            fi
+            echo "Upload failed (attempt ${attempt})"
+            sleep $((attempt * 10))
+          done
+          echo "Upload failed after 6 attempts"
+          exit 1
+
+      - name: Deploy on VPS (retry)
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          REMOTE_CMD='set -e; mkdir -p /var/www/detailflix; tar -xzf /tmp/release.tar.gz -C /var/www/detailflix; cd /var/www/detailflix; pm2 delete detailflix || true; pm2 start ecosystem.config.cjs --only detailflix; pm2 save'
+          for attempt in {1..6}; do
+            echo "Remote deploy attempt ${attempt}/6"
+            if sshpass -p "$VPS_PASSWORD" ssh \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=20 \
+              "$VPS_USER@$VPS_HOST" "$REMOTE_CMD"; then
+              echo "Deploy succeeded"
+              exit 0
+            fi
+            echo "Deploy failed (attempt ${attempt})"
+            sleep $((attempt * 10))
+          done
+          echo "Deploy failed after 6 attempts"
+          exit 1
