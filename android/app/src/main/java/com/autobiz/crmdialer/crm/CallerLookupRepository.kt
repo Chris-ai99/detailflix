@@ -11,6 +11,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import timber.log.Timber
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -70,7 +71,11 @@ class CallerLookupRepository(
       val request = chain.request().newBuilder()
         .addHeader("Authorization", "Bearer $bearerToken")
         .build()
-      chain.proceed(request)
+      try {
+        chain.proceed(request)
+      } catch (security: SecurityException) {
+        throw IOException("Netzwerkzugriff blockiert", security)
+      }
     }
 
     val logging = HttpLoggingInterceptor().apply {
