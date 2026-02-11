@@ -161,7 +161,7 @@ object CallManager {
   }
 
   private fun callId(call: Call): String {
-    return call.details.telecomCallId ?: call.hashCode().toString()
+    return call.hashCode().toString()
   }
 }
 
