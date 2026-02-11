@@ -21,6 +21,7 @@ function isPublicPath(pathname: string): boolean {
     pathname === "/api/auth/register/verify" ||
     pathname === "/api/auth/password/forgot" ||
     pathname === "/api/auth/password/reset" ||
+    pathname === "/api/callerid/lookup" ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
     pathname.startsWith("/detailix-") ||
