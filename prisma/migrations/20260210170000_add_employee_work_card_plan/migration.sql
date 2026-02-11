@@ -1,0 +1,4 @@
+-- NOTE:
+-- This migration is intentionally empty.
+-- EmployeeWorkCard plan columns are ensured idempotently in lib/tenant-db.ts
+-- to keep workspace runtime schema sync resilient.

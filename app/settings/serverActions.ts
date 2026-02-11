@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { eurosToCents } from "@/lib/money";
 
 export async function updateCompanySettings(formData: FormData) {
   const companyName = String(formData.get("companyName") ?? "").trim();
@@ -20,6 +21,19 @@ export async function updateCompanySettings(formData: FormData) {
   const bic = String(formData.get("bic") ?? "").trim() || null;
   const vatId = String(formData.get("vatId") ?? "").trim() || null;
   const noticeRed = String(formData.get("noticeRed") ?? "").trim() || null;
+  const workCardAwMinutesRaw = String(formData.get("workCardAwMinutes") ?? "").trim();
+  const workCardHourlyRateRaw = String(formData.get("workCardHourlyRate") ?? "").trim();
+
+  const workCardAwMinutesParsed = Number(workCardAwMinutesRaw || "10");
+  const workCardAwMinutes =
+    Number.isFinite(workCardAwMinutesParsed) && workCardAwMinutesParsed > 0
+      ? Math.min(120, Math.max(1, Math.trunc(workCardAwMinutesParsed)))
+      : 10;
+
+  const workCardHourlyRateCents = Math.max(0, eurosToCents(workCardHourlyRateRaw || "60"));
+  if (workCardHourlyRateCents <= 0) {
+    throw new Error("Stundensatz muss groesser als 0 sein");
+  }
 
   const nextInvoiceSeqRaw = String(formData.get("nextInvoiceSeq") ?? "").trim();
   const nextInvoiceSeq = nextInvoiceSeqRaw ? Number(nextInvoiceSeqRaw) : null;
@@ -57,6 +71,8 @@ export async function updateCompanySettings(formData: FormData) {
       bic,
       vatId,
       noticeRed,
+      workCardAwMinutes,
+      workCardHourlyRateCents,
       ...(logoDataUrl === undefined ? {} : { logoDataUrl }),
     },
     create: {
@@ -74,6 +90,8 @@ export async function updateCompanySettings(formData: FormData) {
       bic,
       vatId,
       noticeRed,
+      workCardAwMinutes,
+      workCardHourlyRateCents,
       logoDataUrl: logoDataUrl ?? null,
     },
   });

@@ -36,7 +36,7 @@ function formatVehicleLabel(input: {
 
 function StatusBadge({ isFinal, status }: { isFinal: boolean; status: string }) {
   if (status === "CONVERTED") {
-    return <span className="text-xs text-cyan-300">Umgewandelt</span>;
+    return <span className="text-xs text-cyan-300">Angenommen</span>;
   }
   if (!isFinal) {
     return <span className="text-xs text-slate-400">Entwurf</span>;
@@ -214,7 +214,7 @@ export default async function OffersPage({
               <option value="all">Alle anzeigen</option>
               <option value="draft">Entwurf</option>
               <option value="final">Final</option>
-              <option value="converted">Umgewandelt</option>
+              <option value="converted">Angenommen</option>
             </select>
           </div>
 

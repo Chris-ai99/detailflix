@@ -3,15 +3,28 @@ import { notFound, redirect } from "next/navigation";
 import EditorClient from "./ui/EditorClient";
 import { mapDocumentToView } from "@/app/documents/_logic/mapDoc";
 
+type EditSearchParams =
+  | {
+      resolveData?: string;
+      missingCustomer?: string;
+      missingVehicle?: string;
+    }
+  | Promise<{
+      resolveData?: string;
+      missingCustomer?: string;
+      missingVehicle?: string;
+    }>;
+
 export default async function DocumentEditPage({
   params,
+  searchParams,
 }: {
   params: { id: string } | Promise<{ id: string }>;
+  searchParams?: EditSearchParams;
 }) {
-  // ✅ funktioniert bei params als Object UND bei params als Promise
   const { id } = await params;
+  const resolvedSearch = searchParams ? await searchParams : undefined;
 
-  // ✅ Prisma darf niemals undefined bekommen
   if (typeof id !== "string" || id.length === 0) return notFound();
 
   const doc = await prisma.document.findUnique({
@@ -19,7 +32,7 @@ export default async function DocumentEditPage({
     include: {
       customer: true,
       vehicle: true,
-      lines: { orderBy: { position: "asc" } }, // ✅ PRO
+      lines: { orderBy: { position: "asc" } },
     },
   });
 
@@ -30,6 +43,18 @@ export default async function DocumentEditPage({
   }
 
   const viewModel = mapDocumentToView(doc);
+  const forceDataPrompt = String(resolvedSearch?.resolveData ?? "").trim() === "1";
+  const forceMissingCustomer = String(resolvedSearch?.missingCustomer ?? "").trim() === "1";
+  const forceMissingVehicle = String(resolvedSearch?.missingVehicle ?? "").trim() === "1";
 
-  return <EditorClient doc={viewModel} />;
+  return (
+    <EditorClient
+      doc={viewModel}
+      dataResolutionPrompt={{
+        open: forceDataPrompt,
+        missingCustomer: forceMissingCustomer,
+        missingVehicle: forceMissingVehicle,
+      }}
+    />
+  );
 }

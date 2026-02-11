@@ -12,6 +12,7 @@ const globalForAuthDb = globalThis as unknown as AuthDbGlobal;
 type UserRow = {
   id: string;
   email: string;
+  username: string | null;
   password_hash: string;
   full_name: string | null;
   email_verified_at: string;
@@ -22,6 +23,14 @@ type UserRow = {
 type MembershipRow = {
   workspace_id: string;
   role: "OWNER" | "MEMBER";
+};
+
+type WorkspaceMemberUserRow = {
+  user_id: string;
+  username: string | null;
+  full_name: string | null;
+  email: string;
+  membership_created_at: string;
 };
 
 type AccessRequestRow = {
@@ -66,6 +75,26 @@ const SQLITE_TIMEOUT_MS = (() => {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function normalizeUsername(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isValidUsername(value: string): boolean {
+  return /^[a-z0-9._-]{3,32}$/.test(value);
+}
+
+function ensureUsersUsernameColumn(db: Database.Database) {
+  const columns = db.prepare("PRAGMA table_info('users')").all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((col) => col.name));
+
+  if (!existing.has("username")) {
+    db.exec('ALTER TABLE "users" ADD COLUMN "username" TEXT;');
+  }
+  db.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_username_unique" ON "users"("username" COLLATE NOCASE);'
+  );
 }
 
 function getAuthDbPath(): string {
@@ -165,6 +194,8 @@ function getDb(): Database.Database {
       ON password_reset_tokens(user_id);
   `);
 
+  ensureUsersUsernameColumn(db);
+
   globalForAuthDb.db = db;
   return db;
 }
@@ -198,9 +229,20 @@ function uniqueSlug(base: string): string {
 export function findUserByEmail(email: string): UserRow | null {
   const db = getDb();
   const stmt = db.prepare(
-    "SELECT id, email, password_hash, full_name, email_verified_at, created_at, updated_at FROM users WHERE lower(email) = lower(?) LIMIT 1"
+    "SELECT id, email, username, password_hash, full_name, email_verified_at, created_at, updated_at FROM users WHERE lower(email) = lower(?) LIMIT 1"
   );
   return (stmt.get(email) as UserRow | undefined) ?? null;
+}
+
+export function findUserByUsername(username: string): UserRow | null {
+  const db = getDb();
+  const normalized = normalizeUsername(username);
+  if (!normalized) return null;
+
+  const stmt = db.prepare(
+    "SELECT id, email, username, password_hash, full_name, email_verified_at, created_at, updated_at FROM users WHERE lower(username) = lower(?) LIMIT 1"
+  );
+  return (stmt.get(normalized) as UserRow | undefined) ?? null;
 }
 
 export function findMembershipsByUserId(userId: string): MembershipRow[] {
@@ -209,6 +251,54 @@ export function findMembershipsByUserId(userId: string): MembershipRow[] {
     "SELECT workspace_id, role FROM memberships WHERE user_id = ? ORDER BY created_at ASC"
   );
   return stmt.all(userId) as MembershipRow[];
+}
+
+export function listMemberUsersInWorkspace(workspaceId: string): Array<{
+  userId: string;
+  username: string;
+  fullName: string | null;
+  createdAt: string;
+}> {
+  const db = getDb();
+  const safeWorkspaceId = String(workspaceId || "").trim();
+  if (!safeWorkspaceId) return [];
+
+  const rows = db
+    .prepare(
+      `
+      SELECT
+        u.id AS user_id,
+        u.username,
+        u.full_name,
+        u.email,
+        m.created_at AS membership_created_at
+      FROM memberships m
+      INNER JOIN users u ON u.id = m.user_id
+      WHERE m.workspace_id = ? AND m.role = 'MEMBER'
+      ORDER BY lower(COALESCE(u.username, u.email)) ASC, m.created_at DESC
+      `
+    )
+    .all(safeWorkspaceId) as WorkspaceMemberUserRow[];
+
+  return rows.map((row) => {
+    const emailLocalPart = row.email.split("@")[0] || "";
+    const sanitizedFallback = emailLocalPart
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^[._-]+|[._-]+$/g, "")
+      .slice(0, 32);
+    const fallbackUsername =
+      sanitizedFallback.length >= 3
+        ? sanitizedFallback
+        : `mitarbeiter-${row.user_id.replace(/[^a-z0-9]/gi, "").slice(-8).toLowerCase()}`;
+    const username = normalizeUsername(row.username || fallbackUsername);
+    return {
+      userId: row.user_id,
+      username,
+      fullName: row.full_name,
+      createdAt: row.membership_created_at,
+    };
+  });
 }
 
 export function hasPendingAccessRequestByEmail(email: string): boolean {
@@ -449,6 +539,218 @@ export function createUserAndWorkspaceFromRegistration(reg: RegistrationTokenRow
     email,
     role: "OWNER",
   };
+}
+
+export function createMemberUserInWorkspace(input: {
+  workspaceId: string;
+  username: string;
+  passwordHash: string;
+  fullName?: string | null;
+}): {
+  userId: string;
+  workspaceId: string;
+  email: string;
+  username: string;
+  role: "MEMBER";
+} {
+  const db = getDb();
+  const now = nowIso();
+  const username = normalizeUsername(input.username);
+  const workspaceId = String(input.workspaceId || "").trim();
+
+  if (!username) {
+    throw new Error("USERNAME_REQUIRED");
+  }
+  if (!isValidUsername(username)) {
+    throw new Error("USERNAME_INVALID");
+  }
+  if (!workspaceId) {
+    throw new Error("WORKSPACE_REQUIRED");
+  }
+
+  const createMemberEmail = (baseUsername: string): string => {
+    const localBase = `employee.${baseUsername}`;
+    let suffix = 0;
+    while (true) {
+      const localPart = suffix === 0 ? localBase : `${localBase}.${suffix}`;
+      const candidate = `${localPart}@members.autobiz.local`;
+      const existing = db
+        .prepare("SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1")
+        .get(candidate) as { id: string } | undefined;
+      if (!existing) return candidate;
+      suffix += 1;
+    }
+  };
+
+  const tx = db.transaction(() => {
+    const workspace = db
+      .prepare("SELECT id FROM workspaces WHERE id = ? LIMIT 1")
+      .get(workspaceId) as { id: string } | undefined;
+    if (!workspace) {
+      throw new Error("WORKSPACE_NOT_FOUND");
+    }
+
+    const existingUser = db
+      .prepare("SELECT id FROM users WHERE lower(username) = lower(?) LIMIT 1")
+      .get(username) as { id: string } | undefined;
+    if (existingUser) {
+      throw new Error("USERNAME_EXISTS");
+    }
+
+    const userId = crypto.randomUUID();
+    const memberEmail = createMemberEmail(username);
+
+    db.prepare(
+      "INSERT INTO users (id, email, username, password_hash, full_name, email_verified_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(
+      userId,
+      memberEmail,
+      username,
+      input.passwordHash,
+      input.fullName?.trim() || null,
+      now,
+      now,
+      now
+    );
+
+    db.prepare(
+      "INSERT INTO memberships (id, user_id, workspace_id, role, created_at) VALUES (?, ?, ?, 'MEMBER', ?)"
+    ).run(crypto.randomUUID(), userId, workspaceId, now);
+
+    return { userId, memberEmail };
+  });
+
+  const result = tx() as { userId: string; memberEmail: string };
+  return {
+    userId: result.userId,
+    workspaceId,
+    email: result.memberEmail,
+    username,
+    role: "MEMBER",
+  };
+}
+
+export function updateMemberUserInWorkspace(input: {
+  workspaceId: string;
+  userId: string;
+  username: string;
+  fullName?: string | null;
+}): void {
+  const db = getDb();
+  const now = nowIso();
+  const workspaceId = String(input.workspaceId || "").trim();
+  const userId = String(input.userId || "").trim();
+  const username = normalizeUsername(input.username);
+  const fullName = input.fullName?.trim() || null;
+
+  if (!workspaceId) throw new Error("WORKSPACE_REQUIRED");
+  if (!userId) throw new Error("USER_REQUIRED");
+  if (!username) throw new Error("USERNAME_REQUIRED");
+  if (!isValidUsername(username)) throw new Error("USERNAME_INVALID");
+
+  const tx = db.transaction(() => {
+    const membership = db
+      .prepare(
+        "SELECT id FROM memberships WHERE workspace_id = ? AND user_id = ? AND role = 'MEMBER' LIMIT 1"
+      )
+      .get(workspaceId, userId) as { id: string } | undefined;
+    if (!membership) {
+      throw new Error("MEMBER_NOT_FOUND");
+    }
+
+    const duplicate = db
+      .prepare("SELECT id FROM users WHERE lower(username) = lower(?) AND id <> ? LIMIT 1")
+      .get(username, userId) as { id: string } | undefined;
+    if (duplicate) {
+      throw new Error("USERNAME_EXISTS");
+    }
+
+    db.prepare("UPDATE users SET username = ?, full_name = ?, updated_at = ? WHERE id = ?").run(
+      username,
+      fullName,
+      now,
+      userId
+    );
+  });
+
+  try {
+    tx();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("UNIQUE constraint failed")) {
+      throw new Error("USERNAME_EXISTS");
+    }
+    throw error;
+  }
+}
+
+export function setMemberUserPasswordInWorkspace(input: {
+  workspaceId: string;
+  userId: string;
+  passwordHash: string;
+}): void {
+  const db = getDb();
+  const workspaceId = String(input.workspaceId || "").trim();
+  const userId = String(input.userId || "").trim();
+  const passwordHash = String(input.passwordHash || "").trim();
+
+  if (!workspaceId) throw new Error("WORKSPACE_REQUIRED");
+  if (!userId) throw new Error("USER_REQUIRED");
+  if (!passwordHash) throw new Error("PASSWORD_REQUIRED");
+
+  const tx = db.transaction(() => {
+    const membership = db
+      .prepare(
+        "SELECT id FROM memberships WHERE workspace_id = ? AND user_id = ? AND role = 'MEMBER' LIMIT 1"
+      )
+      .get(workspaceId, userId) as { id: string } | undefined;
+    if (!membership) {
+      throw new Error("MEMBER_NOT_FOUND");
+    }
+
+    db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(
+      passwordHash,
+      nowIso(),
+      userId
+    );
+  });
+
+  tx();
+}
+
+export function removeMemberUserFromWorkspace(input: {
+  workspaceId: string;
+  userId: string;
+}): boolean {
+  const db = getDb();
+  const workspaceId = String(input.workspaceId || "").trim();
+  const userId = String(input.userId || "").trim();
+
+  if (!workspaceId) throw new Error("WORKSPACE_REQUIRED");
+  if (!userId) throw new Error("USER_REQUIRED");
+
+  const tx = db.transaction(() => {
+    const membership = db
+      .prepare(
+        "SELECT id FROM memberships WHERE workspace_id = ? AND user_id = ? AND role = 'MEMBER' LIMIT 1"
+      )
+      .get(workspaceId, userId) as { id: string } | undefined;
+    if (!membership) return false;
+
+    db.prepare("DELETE FROM memberships WHERE id = ?").run(membership.id);
+
+    const remaining = db
+      .prepare("SELECT COUNT(*) AS count FROM memberships WHERE user_id = ?")
+      .get(userId) as { count: number | bigint };
+    const remainingCount =
+      typeof remaining.count === "bigint" ? Number(remaining.count) : Number(remaining.count || 0);
+
+    if (remainingCount <= 0) {
+      db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    }
+    return true;
+  });
+
+  return tx() as boolean;
 }
 
 export function createPasswordResetTokenForUser(userId: string): string {

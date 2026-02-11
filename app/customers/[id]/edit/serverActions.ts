@@ -8,6 +8,15 @@ function asNullable(value: FormDataEntryValue | null) {
   return text || null;
 }
 
+function euroToCentsNullable(value: FormDataEntryValue | null) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = raw.replace(",", ".");
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * 100);
+}
+
 export async function updateCustomer(formData: FormData) {
   const id = String(formData.get("id") || "");
   const isBusiness = String(formData.get("isBusiness") || "0") === "1";
@@ -43,6 +52,7 @@ export async function updateCustomer(formData: FormData) {
     city: asNullable(formData.get("city")),
     country: countryRaw || "Deutschland",
     notes: asNullable(formData.get("notes")),
+    hourlyRateCents: euroToCentsNullable(formData.get("hourlyRateEur")),
   };
 
   await prisma.customer.update({

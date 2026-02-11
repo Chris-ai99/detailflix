@@ -16,6 +16,15 @@ function asIntNullable(value: FormDataEntryValue | null) {
   return Math.trunc(num);
 }
 
+function euroToCentsNullable(value: FormDataEntryValue | null) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = raw.replace(",", ".");
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * 100);
+}
+
 export async function createCustomer(formData: FormData) {
   const isBusiness = String(formData.get("isBusiness") || "0") === "1";
   const companyNameRaw = String(formData.get("companyName") || "").trim();
@@ -51,6 +60,7 @@ export async function createCustomer(formData: FormData) {
     city: asNullable(formData.get("city")),
     country: countryRaw || "Deutschland",
     notes: asNullable(formData.get("notes")),
+    hourlyRateCents: euroToCentsNullable(formData.get("hourlyRateEur")),
   };
 
   const vehicleMake = asNullable(formData.get("vehicleMake"));

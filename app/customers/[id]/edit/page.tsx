@@ -24,6 +24,11 @@ function splitName(fullName?: string | null): { firstName: string; lastName: str
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
+function centsToInputEuro(cents?: number | null): string {
+  if (!Number.isFinite(cents ?? null) || (cents ?? 0) <= 0) return "";
+  return ((cents as number) / 100).toFixed(2);
+}
+
 export default async function EditCustomerPage({
   params,
 }: {
@@ -142,6 +147,19 @@ export default async function EditCustomerPage({
               <div>
                 <label className={labelClass}>USt-IdNr (optional)</label>
                 <input name="vatId" defaultValue={customer.vatId ?? ""} placeholder="DE..." className={inputClass} />
+              </div>
+
+              <div>
+                <label className={labelClass}>Stundenverrechnungssatz netto (EUR/h, optional)</label>
+                <input
+                  name="hourlyRateEur"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  defaultValue={centsToInputEuro(customer.hourlyRateCents)}
+                  placeholder="z. B. 60,00"
+                  className={inputClass}
+                />
               </div>
             </div>
           </section>

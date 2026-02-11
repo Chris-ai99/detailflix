@@ -78,6 +78,18 @@ export default function NewCustomerPage() {
                 <label className={labelClass}>USt-IdNr (optional)</label>
                 <input name="vatId" placeholder="DE..." className={inputClass} />
               </div>
+
+              <div>
+                <label className={labelClass}>Stundenverrechnungssatz netto (EUR/h, optional)</label>
+                <input
+                  name="hourlyRateEur"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="z. B. 60,00"
+                  className={inputClass}
+                />
+              </div>
             </div>
 
             <div className="mt-5 rounded-lg border border-slate-700/80 bg-slate-800/40 p-4">

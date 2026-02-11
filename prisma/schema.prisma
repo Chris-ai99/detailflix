@@ -22,6 +22,7 @@ model Customer {
   city   String?
   country String?
   notes  String?
+  hourlyRateCents Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -71,6 +72,8 @@ model CompanySettings {
 
   noticeRed   String?
   logoDataUrl String?
+  workCardAwMinutes Int @default(10)
+  workCardHourlyRateCents Int @default(6000)
 
   updatedAt DateTime @updatedAt
 }
@@ -126,6 +129,82 @@ model Vehicle {
   documents Document[]
   customer  Customer? @relation(fields: [customerId], references: [id])
   attachments CustomerAttachment[]
+}
+
+model EmployeeWorkCard {
+  id String @id @default(cuid())
+
+  customerId String?
+  vehicleId String?
+  planRank Int?
+  plannedSteps String?
+  plannedNote String?
+  customerName String?
+  vehicleMake String?
+  vehicleModel String?
+  licensePlate String?
+  notes String?
+  workDate DateTime @default(now())
+  createdByUserId String?
+  createdByEmail String?
+  assignedToUserId String?
+  assignedToLabel String?
+  sourceOfferId String?
+  sourceOrderId String?
+  invoiceDocumentId String?
+  billingReadyAt DateTime?
+  archivedAt DateTime?
+
+  status EmployeeWorkCardStatus @default(OPEN)
+  closedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  steps EmployeeWorkStep[]
+
+  @@index([status, updatedAt])
+  @@index([workDate, status])
+  @@index([status, planRank, workDate])
+  @@index([assignedToUserId, workDate, status])
+  @@index([archivedAt, workDate])
+  @@index([customerId, workDate])
+  @@index([vehicleId, workDate])
+  @@index([invoiceDocumentId])
+}
+
+model EmployeeWorkStep {
+  id String @id @default(cuid())
+
+  cardId String
+  card EmployeeWorkCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  name String
+  startedAt DateTime
+  endedAt DateTime?
+  durationSeconds Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cardId, startedAt])
+  @@index([cardId, endedAt])
+}
+
+model EmployeeWorkPlan {
+  id String @id @default(cuid())
+
+  memberUserId String
+  dayOfWeek Int
+  startTime String?
+  endTime String?
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([memberUserId, dayOfWeek])
+  @@index([memberUserId, dayOfWeek])
 }
 
 model DocumentDraftCounter {
@@ -271,4 +350,9 @@ enum CustomerAttachmentKind {
   VEHICLE_REGISTRATION
   PRIVACY_AGREEMENT_UNSIGNED
   PRIVACY_AGREEMENT_SIGNED
+}
+
+enum EmployeeWorkCardStatus {
+  OPEN
+  CLOSED
 }

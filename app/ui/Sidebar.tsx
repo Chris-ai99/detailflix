@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getWorkspaceIdFromCookies } from "@/lib/auth";
+import { getSessionFromCookies, getWorkspaceIdFromCookies } from "@/lib/auth";
 import { unstable_cache } from "next/cache";
 import SidebarClient from "./SidebarClient";
 
@@ -99,15 +99,17 @@ const readSidebarCountsCached = unstable_cache(
 
 export default async function Sidebar() {
   try {
+    const session = await getSessionFromCookies();
+    const role = session?.role ?? "OWNER";
     const workspaceId = await getWorkspaceIdFromCookies();
     if (!workspaceId) {
-      return <SidebarClient counts={ZERO_COUNTS} />;
+      return <SidebarClient counts={ZERO_COUNTS} role={role} />;
     }
 
     const counts = await readSidebarCountsCached(workspaceId);
-    return <SidebarClient counts={counts} />;
+    return <SidebarClient counts={counts} role={role} />;
   } catch (error) {
     console.error("[sidebar] count load failed", error);
-    return <SidebarClient counts={ZERO_COUNTS} />;
+    return <SidebarClient counts={ZERO_COUNTS} role="OWNER" />;
   }
 }

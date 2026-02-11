@@ -1,0 +1,4 @@
+-- NOTE:
+-- This migration is intentionally empty.
+-- Additional EmployeeWorkCard and CompanySettings columns are ensured
+-- idempotently in lib/tenant-db.ts for runtime workspace schema sync.

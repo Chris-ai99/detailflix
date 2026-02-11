@@ -1,7 +1,6 @@
-type LoginPageProps = {
+type EmployeeLoginPageProps = {
   searchParams: Promise<{
     error?: string;
-    status?: string;
     next?: string;
   }>;
 };
@@ -9,30 +8,23 @@ type LoginPageProps = {
 function getErrorMessage(error?: string) {
   switch (error) {
     case "credentials":
-      return "E-Mail oder Passwort ist falsch.";
+      return "Benutzername oder Passwort ist falsch.";
+    case "employee-only":
+      return "Fuer dieses Konto ist kein Mitarbeiter-Zugang vorhanden.";
     case "workspace":
       return "Fuer dieses Konto wurde kein Workspace gefunden.";
-    case "employee-only":
-      return "Bitte den Mitarbeiter-Login verwenden.";
     default:
       return null;
   }
 }
 
-function getStatusMessage(status?: string) {
-  switch (status) {
-    case "pw-reset":
-      return "Passwort wurde geaendert. Bitte neu einloggen.";
-    default:
-      return null;
-  }
-}
-
-export default async function LoginPage({ searchParams }: LoginPageProps) {
+export default async function EmployeeLoginPage({ searchParams }: EmployeeLoginPageProps) {
   const params = await searchParams;
-  const next = params.next && params.next.startsWith("/") ? params.next : "/dashboard";
+  const next =
+    params.next && params.next.startsWith("/")
+      ? params.next
+      : "/employees?module=cards&view=employee";
   const errorMessage = getErrorMessage(params.error);
-  const statusMessage = getStatusMessage(params.status);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
@@ -41,9 +33,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <img src="/detailix-wordmark.svg" alt="Autosello" className="h-7 w-auto" />
         </div>
 
-        <h1 className="mb-1 text-center text-2xl font-semibold text-slate-100">Anmeldung</h1>
+        <h1 className="mb-1 text-center text-2xl font-semibold text-slate-100">
+          Mitarbeiter Login
+        </h1>
         <p className="mb-6 text-center text-sm text-slate-400">
-          Melde dich mit deiner E-Mail-Adresse an.
+          Zugang nur fuer Arbeitskarten und Zeiterfassung.
         </p>
 
         {errorMessage ? (
@@ -52,22 +46,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
         ) : null}
 
-        {statusMessage ? (
-          <div className="mb-4 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-            {statusMessage}
-          </div>
-        ) : null}
-
         <form action="/api/auth/login" method="post" className="space-y-4">
           <input type="hidden" name="next" value={next} />
+          <input type="hidden" name="portal" value="employee" />
 
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-300">E-Mail</span>
+            <span className="mb-1 block text-sm text-slate-300">Benutzername</span>
             <input
-              name="email"
-              type="email"
+              name="username"
+              type="text"
               required
-              autoComplete="email"
+              minLength={3}
+              maxLength={32}
+              pattern="[a-z0-9._-]{3,32}"
+              autoComplete="username"
               className="w-full rounded-lg border border-slate-600 bg-slate-900/80 px-3 py-2 text-slate-100 outline-none ring-cyan-400/40 transition focus:ring-2"
             />
           </label>
@@ -83,31 +75,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             />
           </label>
 
-          <div className="text-right text-sm">
-            <a href="/forgot-password" className="text-cyan-300 hover:text-cyan-200">
-              Passwort vergessen?
-            </a>
-          </div>
-
           <button
             type="submit"
             className="mt-2 w-full rounded-lg bg-cyan-500 px-4 py-2 font-medium text-slate-950 transition hover:bg-cyan-400"
           >
-            Einloggen
+            Als Mitarbeiter einloggen
           </button>
         </form>
 
         <p className="mt-5 text-center text-sm text-slate-400">
-          Noch kein Konto?{" "}
-          <a href="/register" className="text-cyan-300 hover:text-cyan-200">
-            Freigabe anfragen
-          </a>
-        </p>
-
-        <p className="mt-2 text-center text-sm text-slate-400">
-          Mitarbeiter?{" "}
-          <a href="/employee-login" className="text-cyan-300 hover:text-cyan-200">
-            Hier einloggen
+          Verwaltungskonto?{" "}
+          <a href="/login" className="text-cyan-300 hover:text-cyan-200">
+            Zum Standard-Login
           </a>
         </p>
       </div>

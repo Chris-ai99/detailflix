@@ -274,6 +274,7 @@ export default async function DashboardPage() {
     offerDocsForChart,
     recentOrders,
     recentVehicles,
+    workCardsReadyForBilling,
   ] = await Promise.all([
     prisma.document.aggregate({
       where: {
@@ -347,6 +348,13 @@ export default async function DashboardPage() {
         customer: { select: { id: true, name: true, isBusiness: true } },
       },
     }),
+    prisma.employeeWorkCard.count({
+      where: {
+        status: "CLOSED",
+        invoiceDocumentId: null,
+        billingReadyAt: { not: null },
+      },
+    }),
   ]);
 
   const unpaidSum = unpaidAgg._sum.grossTotalCents ?? 0;
@@ -382,6 +390,15 @@ export default async function DashboardPage() {
       </div>
 
       <div className="text-sm text-slate-300">Dashboard</div>
+
+      {workCardsReadyForBilling > 0 ? (
+        <Link
+          href="/employees?module=cards&view=employer&status=billing-ready"
+          className="block rounded border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 hover:bg-amber-500/15"
+        >
+          {workCardsReadyForBilling} Arbeitskarte(n) sind bereit zur Abrechnung.
+        </Link>
+      ) : null}
 
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-12 md:col-span-3">
@@ -662,10 +679,10 @@ export default async function DashboardPage() {
         </div>
         <div className="col-span-12 md:col-span-6 rounded border border-amber-500/30 bg-amber-500/15 px-4 py-3 text-amber-100">
           <div className="text-sm font-semibold">Mitarbeiter-Modul</div>
-          <div className="mt-1 text-xs">Platzhalter-Hinweis (kann sp\u00e4ter an echte Features gekoppelt werden).</div>
+          <div className="mt-1 text-xs">Arbeitskarten mit Start/Stop-Zeiterfassung pro Arbeitsschritt.</div>
           <div className="mt-3 flex gap-2">
             <Link
-              href="/employees"
+              href="/employees?module=cards&view=employer"
               className="rounded bg-amber-500/20 px-3 py-1 text-xs text-amber-100 hover:bg-amber-500/30"
             >
               {"\u00d6ffnen"}

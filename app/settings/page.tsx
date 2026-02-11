@@ -11,6 +11,10 @@ export default async function SettingsPage() {
     select: { lastSeq: true },
   });
   const nextInvoiceSeq = (invoiceCounter?.lastSeq ?? 0) + 1;
+  const workCardAwMinutes = Math.max(1, s?.workCardAwMinutes ?? 10);
+  const workCardHourlyRate = ((s?.workCardHourlyRateCents ?? 6000) / 100)
+    .toFixed(2)
+    .replace(".", ",");
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -118,6 +122,39 @@ export default async function SettingsPage() {
                   <span className="font-mono text-slate-300">
                     RE-{year}-{String(nextInvoiceSeq).padStart(5, "0")}
                   </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded border border-slate-700 bg-slate-800 p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-200">Arbeitskarten Abrechnung</div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm text-slate-300">AW Minuten</label>
+                <input
+                  type="number"
+                  name="workCardAwMinutes"
+                  min={1}
+                  max={120}
+                  step={1}
+                  defaultValue={workCardAwMinutes}
+                  className="mt-1 w-full rounded bg-slate-900 p-2"
+                />
+                <div className="mt-1 text-xs text-slate-400">
+                  1 AW entspricht dieser Minutenanzahl (z.B. 10).
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-300">Stundensatz netto (EUR)</label>
+                <input
+                  type="text"
+                  name="workCardHourlyRate"
+                  defaultValue={workCardHourlyRate}
+                  className="mt-1 w-full rounded bg-slate-900 p-2"
+                />
+                <div className="mt-1 text-xs text-slate-400">
+                  Beispiel: 60,00 entspricht 60 EUR netto pro Stunde.
                 </div>
               </div>
             </div>

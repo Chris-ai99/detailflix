@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -17,6 +17,7 @@ import {
   searchServices,
   searchStockVehicles,
   addCustomLine,
+  updateDocumentLine,
   moveDocumentLine,
   deleteDocumentLine,
   deleteDocument,
@@ -24,6 +25,12 @@ import {
   createCreditNoteFromInvoice,
   createStornoFromInvoice,
 } from "@/app/documents/serverActions";
+
+type DataResolutionPrompt = {
+  open?: boolean;
+  missingCustomer?: boolean;
+  missingVehicle?: boolean;
+};
 
 function toInputDate(value: Date | string | null | undefined) {
   if (!value) return "";
@@ -63,7 +70,13 @@ function formatDocLabel(doc: {
   return `Entwurf ${doc.docNumber}`;
 }
 
-export default function EditorClient({ doc }: { doc: any }) {
+export default function EditorClient({
+  doc,
+  dataResolutionPrompt,
+}: {
+  doc: any;
+  dataResolutionPrompt?: DataResolutionPrompt;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -121,6 +134,19 @@ export default function EditorClient({ doc }: { doc: any }) {
             : doc.docType === "PURCHASE_CONTRACT"
               ? "Auftrag"
               : "Dokument";
+  const hasCustomerForInvoice = Boolean(doc.customer?.id);
+  const hasVehicleForInvoice = Boolean(doc.vehicle);
+  const invoiceMissingData = doc.docType === "INVOICE" && (!hasCustomerForInvoice || !hasVehicleForInvoice);
+  const promptMissingCustomer =
+    doc.docType === "INVOICE" &&
+    Boolean(dataResolutionPrompt?.open) &&
+    !hasCustomerForInvoice;
+  const promptMissingVehicle =
+    doc.docType === "INVOICE" &&
+    Boolean(dataResolutionPrompt?.open) &&
+    !hasVehicleForInvoice;
+  const shouldPromptDataResolution = promptMissingCustomer || promptMissingVehicle;
+  const [showDataResolutionModal, setShowDataResolutionModal] = useState(shouldPromptDataResolution);
 
   const pdfUrl = useMemo(() => {
     // ts verhindert Cache
@@ -182,6 +208,15 @@ export default function EditorClient({ doc }: { doc: any }) {
   useEffect(() => {
     setPaidAtInput(toInputDate(doc.paidAt ?? new Date()));
   }, [doc.paidAt]);
+
+  useEffect(() => {
+    if (!shouldPromptDataResolution) {
+      setShowDataResolutionModal(false);
+      return;
+    }
+    setStep(2);
+    setShowDataResolutionModal(true);
+  }, [doc.id, shouldPromptDataResolution]);
 
   useEffect(() => {
     // Step 5 gibt es nur bei bezahlten Rechnungen.
@@ -255,7 +290,7 @@ export default function EditorClient({ doc }: { doc: any }) {
   }
 
   function finalizeNow() {
-    if (isLocked || doc.isFinal) return;
+    if (isLocked || doc.isFinal || invoiceMissingData) return;
     startTransition(async () => {
       await finalizeDocument(doc.id);
       setRefreshKey((k) => k + 1);
@@ -333,11 +368,27 @@ export default function EditorClient({ doc }: { doc: any }) {
   const [lineIsMarginScheme, setLineIsMarginScheme] = useState(false);
   const [, setSelectedItem] = useState<{ type: "service" | "stock"; item: any } | null>(null);
   const [activeLineId, setActiveLineId] = useState<string | null>(doc.lines?.[0]?.id ?? null);
+  const [editLineTitle, setEditLineTitle] = useState("");
+  const [editLineDescription, setEditLineDescription] = useState("");
+  const activeLine = useMemo(
+    () => (doc.lines ?? []).find((line: any) => line.id === activeLineId) ?? null,
+    [doc.lines, activeLineId]
+  );
 
   // wenn sich lines durch refresh ändern: activeLineId ggf. stabil halten
   useEffect(() => {
     if (!activeLineId && doc.lines?.length) setActiveLineId(doc.lines[0].id);
   }, [doc.lines]);
+
+  useEffect(() => {
+    if (!activeLine) {
+      setEditLineTitle("");
+      setEditLineDescription("");
+      return;
+    }
+    setEditLineTitle(String(activeLine.title ?? ""));
+    setEditLineDescription(String(activeLine.description ?? ""));
+  }, [activeLine]);
 
   // Services suchen (debounced)
 
@@ -447,8 +498,82 @@ export default function EditorClient({ doc }: { doc: any }) {
     });
   }
 
+  function resetActiveLineText() {
+    if (!activeLine) return;
+    setEditLineTitle(String(activeLine.title ?? ""));
+    setEditLineDescription(String(activeLine.description ?? ""));
+  }
+
+  function saveActiveLineText() {
+    if (!activeLine || isLocked) return;
+    const title = editLineTitle.trim();
+    const description = editLineDescription.trim();
+    if (!title && !description) {
+      alert("Bitte mindestens Positionstitel oder Beschreibung eingeben.");
+      return;
+    }
+
+    startTransition(async () => {
+      await updateDocumentLine(activeLine.id, {
+        title: title || "Freitext",
+        description: description || null,
+      });
+      setRefreshKey((k) => k + 1);
+      router.refresh();
+    });
+  }
+
+  const hasLineTextChanges =
+    Boolean(activeLine) &&
+    (editLineTitle !== String(activeLine?.title ?? "") ||
+      editLineDescription !== String(activeLine?.description ?? ""));
+
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_520px]">
+    <>
+      {showDataResolutionModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-amber-500/40 bg-slate-900 p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-amber-500/20 text-amber-200">
+                !
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-amber-200">
+                  {"Daten f\u00fcr die Abrechnung fehlen"}
+                </h2>
+                <p className="mt-2 text-sm text-slate-200">
+                  {"Damit die Rechnung korrekt erstellt und final gespeichert werden kann, m\u00fcssen die fehlenden Angaben jetzt erfasst werden."}
+                </p>
+              </div>
+            </div>
+            <ul className="mt-4 space-y-1 rounded border border-slate-700 bg-slate-950/50 p-3 text-sm text-slate-200">
+              {promptMissingCustomer ? <li>{"• Kunde fehlt"}</li> : null}
+              {promptMissingVehicle ? <li>{"• Fahrzeug fehlt"}</li> : null}
+            </ul>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDataResolutionModal(false)}
+                className="rounded border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700"
+              >
+                {"Sp\u00e4ter"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep(2);
+                  setShowDataResolutionModal(false);
+                }}
+                className="rounded bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-600"
+              >
+                {"Daten jetzt erg\u00e4nzen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_520px]">
       {/* LINKS: Wizard */}
       <div className="space-y-4">
         <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4">
@@ -478,14 +603,21 @@ export default function EditorClient({ doc }: { doc: any }) {
                     Final gespeichert
                   </span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={finalizeNow}
-                    disabled={isPending}
-                    className="rounded bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
-                  >
-                    Rechnung final speichern
-                  </button>
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={finalizeNow}
+                      disabled={isPending || invoiceMissingData}
+                      className="rounded bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
+                    >
+                      Rechnung final speichern
+                    </button>
+                    {invoiceMissingData ? (
+                      <div className="text-xs text-amber-300">
+                        {"Kunde und Fahrzeug m\u00fcssen vor dem Finalisieren erfasst werden."}
+                      </div>
+                    ) : null}
+                  </div>
                 )}
               </div>
             ) : (
@@ -1026,6 +1158,55 @@ export default function EditorClient({ doc }: { doc: any }) {
                 )}
               </div>
 
+              <div className="rounded border border-slate-700 bg-slate-800 p-3">
+                <div className="mb-2 text-sm text-slate-300">Ausgewaehlte Position bearbeiten</div>
+                {!activeLine ? (
+                  <div className="text-sm text-slate-400">Bitte oben eine Position auswaehlen.</div>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-slate-300">Positionstitel</label>
+                      <input
+                        type="text"
+                        value={editLineTitle}
+                        onChange={(e) => setEditLineTitle(e.target.value)}
+                        disabled={isLocked || isPending}
+                        className="w-full rounded bg-slate-900 p-2 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-300">Beschreibung</label>
+                      <textarea
+                        value={editLineDescription}
+                        onChange={(e) => setEditLineDescription(e.target.value)}
+                        disabled={isLocked || isPending}
+                        className="h-24 w-full rounded bg-slate-900 p-2 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={resetActiveLineText}
+                        disabled={isLocked || isPending || !hasLineTextChanges}
+                        className="rounded bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600 disabled:opacity-50"
+                      >
+                        Zuruecksetzen
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveActiveLineText}
+                        disabled={isLocked || isPending || !hasLineTextChanges}
+                        className="rounded bg-cyan-700 px-3 py-2 text-sm hover:bg-cyan-600 disabled:opacity-50"
+                      >
+                        Aenderungen speichern
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between">
                 <button
                   type="button"
@@ -1257,7 +1438,8 @@ export default function EditorClient({ doc }: { doc: any }) {
           className="h-[82vh] w-full rounded bg-white"
         />
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -1340,7 +1522,6 @@ function Step2CustomerVehicle({
   // Fahrzeuge suchen
   useEffect(() => {
     if (!showVehicleResults) return;
-    if (!currentCustomer) return;
 
     let cancelled = false;
     const t = setTimeout(async () => {
@@ -1656,12 +1837,12 @@ function Step2CustomerVehicle({
                   }}
                   placeholder="Suche"
                   className="w-full rounded bg-slate-800 p-2"
-                  disabled={disabled || !currentCustomer}
+                  disabled={disabled}
                 />
                 <button
                   type="button"
                   className="rounded bg-cyan-600 px-3 py-2 text-sm text-white"
-                  disabled={disabled || !currentCustomer}
+                  disabled={disabled}
                   onClick={() => setShowVehicleResults((v) => !v)}
                 >
                   ≡
@@ -1673,9 +1854,7 @@ function Step2CustomerVehicle({
                   showVehicleResults ? "" : "hidden"
                 }`}
               >
-                {!currentCustomer ? (
-                  <div className="p-3 text-sm text-slate-500">Bitte zuerst Kunden auswählen</div>
-                ) : vehicleResults.length === 0 ? (
+                {vehicleResults.length === 0 ? (
                   <div className="p-3 text-sm text-slate-500">
                     {vehicleQuery.trim() ? "Keine Treffer" : "Vorschläge werden geladen…"}
                   </div>
@@ -1719,7 +1898,7 @@ function Step2CustomerVehicle({
               <button
                 type="button"
                 onClick={() => setShowVehicleCreate((v) => !v)}
-                disabled={disabled || !currentCustomer}
+                disabled={disabled}
                 className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
               >
                 {showVehicleCreate ? "Schließen" : "Neues Fahrzeug anlegen"}
@@ -1727,7 +1906,7 @@ function Step2CustomerVehicle({
             </div>
           </div>
 
-          {showVehicleCreate && currentCustomer && (
+          {showVehicleCreate && (
             <form action={submitNewVehicle} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <input name="make" placeholder="Marke" disabled={disabled} className="rounded bg-slate-900 p-2" />
               <input name="model" placeholder="Modell" disabled={disabled} className="rounded bg-slate-900 p-2" />
@@ -1742,8 +1921,11 @@ function Step2CustomerVehicle({
 
               <div className="rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-400 sm:col-span-2">
                 {docType === "INVOICE"
-                  ? "Für Händler: Mit 'Nur im Dokument' wird das Fahrzeug nicht im Kundenstamm gespeichert."
-                  : "Sie können das Fahrzeug im Kundenstamm speichern oder nur im Dokument verwenden."}
+                  ? "Mit 'Nur im Dokument' wird das Fahrzeug nur auf der Rechnung gespeichert."
+                  : "Sie können das Fahrzeug speichern oder nur im Dokument verwenden."}
+                {!currentCustomer
+                  ? " Wenn noch kein Kunde gesetzt ist, kann die Verkn\u00fcpfung sp\u00e4ter erfolgen."
+                  : ""}
               </div>
 
               <button

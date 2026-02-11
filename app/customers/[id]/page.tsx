@@ -65,6 +65,15 @@ function formatDate(value?: Date | string | null): string {
   });
 }
 
+function formatHourlyRate(cents?: number | null): string {
+  if (!Number.isFinite(cents ?? null) || (cents ?? 0) <= 0) return "-";
+  const euros = (cents as number) / 100;
+  return `${euros.toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} EUR/h netto`;
+}
+
 function splitName(fullName?: string | null): { firstName: string; lastName: string } {
   const name = (fullName || "").trim();
   if (!name) return { firstName: "", lastName: "" };
@@ -313,6 +322,10 @@ export default async function CustomerDetailPage({
             <div className="rounded-lg border border-slate-700/80 bg-slate-800/40 px-3 py-2">
               <dt className={labelClass}>USt-Id</dt>
               <dd className="mt-1 text-sm text-slate-100">{customer.vatId ?? "-"}</dd>
+            </div>
+            <div className="rounded-lg border border-slate-700/80 bg-slate-800/40 px-3 py-2">
+              <dt className={labelClass}>Stundenverrechnungssatz</dt>
+              <dd className="mt-1 text-sm text-slate-100">{formatHourlyRate(customer.hourlyRateCents)}</dd>
             </div>
             <div className="rounded-lg border border-slate-700/80 bg-slate-800/40 px-3 py-2 md:col-span-2">
               <dt className={labelClass}>Adresse</dt>

@@ -8,6 +8,7 @@ export type AuthSession = {
   userId: string;
   workspaceId: string;
   email: string;
+  username?: string;
   role: "OWNER" | "MEMBER";
   exp: number;
 };
@@ -22,6 +23,7 @@ export async function signAuthSession(session: Omit<AuthSession, "exp">): Promis
     userId: session.userId,
     workspaceId: session.workspaceId,
     email: session.email,
+    username: session.username,
     role: session.role,
   })
     .setProtectedHeader({ alg: "HS256" })
@@ -38,6 +40,9 @@ export async function verifyAuthSession(token?: string): Promise<AuthSession | n
     const userId = String(payload.userId ?? "");
     const workspaceId = String(payload.workspaceId ?? "");
     const email = String(payload.email ?? "");
+    const usernameRaw = payload.username;
+    const username =
+      typeof usernameRaw === "string" && usernameRaw.trim() ? String(usernameRaw).trim() : undefined;
     const role = String(payload.role ?? "");
     const exp = Number(payload.exp ?? 0);
 
@@ -48,6 +53,7 @@ export async function verifyAuthSession(token?: string): Promise<AuthSession | n
       userId,
       workspaceId,
       email,
+      username,
       role,
       exp,
     };

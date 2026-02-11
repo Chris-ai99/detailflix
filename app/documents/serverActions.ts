@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { DocumentStatus } from "@prisma/client";
+import { getSessionFromCookies } from "@/lib/auth";
 
 const CUSTOMER_SEARCH_SELECT = {
   id: true,
@@ -105,6 +106,25 @@ function getDocumentVehicleSnapshotData(source: {
     vin: source.vehicleVin ?? null,
     mileage: source.vehicleMileage ?? null,
   });
+}
+
+function getCustomerDisplayName(source?: {
+  name?: string | null;
+  companyName?: string | null;
+  contactFirstName?: string | null;
+  contactLastName?: string | null;
+  isBusiness?: boolean;
+} | null): string | null {
+  if (!source) return null;
+  const name = String(source.name ?? "").trim();
+  if (name) return name;
+  const company = String(source.companyName ?? "").trim();
+  if (company) return company;
+  const contact = `${String(source.contactFirstName ?? "").trim()} ${String(
+    source.contactLastName ?? ""
+  ).trim()}`.trim();
+  if (contact) return contact;
+  return source.isBusiness ? "Gewerbekunde" : null;
 }
 
 /* -----------------------------------------
@@ -222,21 +242,34 @@ export async function createCustomer(input: {
 export async function setDocumentCustomer(documentId: string, customerId: string | null) {
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
-    select: { status: true },
+    select: { status: true, vehicleId: true },
   });
   if (!doc) throw new Error("Dokument nicht gefunden");
   assertDocEditable(doc.status);
 
-  await prisma.document.update({
-    where: { id: documentId },
-    data: {
-      customerId: customerId || null,
-      vehicleId: null,
-      vehicleMake: null,
-      vehicleModel: null,
-      vehicleVin: null,
-      vehicleMileage: null,
-    },
+  const nextCustomerId = customerId || null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.document.update({
+      where: { id: documentId },
+      data: {
+        customerId: nextCustomerId,
+      },
+    });
+
+    if (!nextCustomerId || !doc.vehicleId) return;
+
+    const vehicle = await tx.vehicle.findUnique({
+      where: { id: doc.vehicleId },
+      select: { id: true, customerId: true },
+    });
+    if (!vehicle) return;
+    if (vehicle.customerId) return;
+
+    await tx.vehicle.update({
+      where: { id: vehicle.id },
+      data: { customerId: nextCustomerId },
+    });
   });
 
   revalidatePath(`/documents/${documentId}/edit`);
@@ -251,46 +284,61 @@ export async function setDocumentCustomer(documentId: string, customerId: string
  * Fahrzeuge
  * ----------------------------------------- */
 
-export async function searchVehicles(query: string, customerId?: string | null) {
+export async function searchVehicles(
+  query: string,
+  customerId?: string | null,
+  options?: { requireCustomerLink?: boolean }
+) {
   const q = (query ?? "").trim();
-  const baseWhere: any = {
+  const requireCustomerLink = options?.requireCustomerLink === true;
+  const baseWhere = {
     isStock: false,
     isSold: false,
+    ...(requireCustomerLink ? { customerId: { not: null } } : {}),
     ...(customerId ? { customerId } : {}),
   };
-
-  if (!q) {
-    return prisma.vehicle.findMany({
-      take: 20,
-      where: baseWhere,
-      orderBy: { createdAt: "desc" },
+  const vehicleSelect = {
+    id: true,
+    make: true,
+    model: true,
+    vin: true,
+    year: true,
+    mileage: true,
+    customerId: true,
+    customer: {
       select: {
         id: true,
-        make: true,
-        model: true,
-        vin: true,
-        year: true,
-        mileage: true,
+        name: true,
+        companyName: true,
+        contactFirstName: true,
+        contactLastName: true,
+        isBusiness: true,
       },
-    });
-  }
+    },
+  } as const;
 
-  return prisma.vehicle.findMany({
+  const rows = await prisma.vehicle.findMany({
     take: 20,
-    where: {
-      ...baseWhere,
-      OR: [{ make: { contains: q } }, { model: { contains: q } }, { vin: { contains: q } }],
-    },
+    where: q
+      ? {
+          ...baseWhere,
+          OR: [{ make: { contains: q } }, { model: { contains: q } }, { vin: { contains: q } }],
+        }
+      : baseWhere,
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      make: true,
-      model: true,
-      vin: true,
-      year: true,
-      mileage: true,
-    },
+    select: vehicleSelect,
   });
+
+  return rows.map((row) => ({
+    id: row.id,
+    make: row.make,
+    model: row.model,
+    vin: row.vin,
+    year: row.year,
+    mileage: row.mileage,
+    customerId: row.customerId,
+    customerDisplayName: getCustomerDisplayName(row.customer),
+  }));
 }
 
 export async function createVehicle(input: {
@@ -322,20 +370,38 @@ export async function createVehicle(input: {
 export async function setDocumentVehicle(documentId: string, vehicleId: string | null) {
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
-    select: { status: true },
+    select: { status: true, customerId: true },
   });
   if (!doc) throw new Error("Dokument nicht gefunden");
   assertDocEditable(doc.status);
 
-  await prisma.document.update({
-    where: { id: documentId },
-    data: {
-      vehicleId: vehicleId || null,
-      vehicleMake: null,
-      vehicleModel: null,
-      vehicleVin: null,
-      vehicleMileage: null,
-    },
+  const nextVehicleId = vehicleId || null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.document.update({
+      where: { id: documentId },
+      data: {
+        vehicleId: nextVehicleId,
+        vehicleMake: null,
+        vehicleModel: null,
+        vehicleVin: null,
+        vehicleMileage: null,
+      },
+    });
+
+    if (!nextVehicleId || !doc.customerId) return;
+
+    const vehicle = await tx.vehicle.findUnique({
+      where: { id: nextVehicleId },
+      select: { id: true, customerId: true },
+    });
+    if (!vehicle) return;
+    if (vehicle.customerId) return;
+
+    await tx.vehicle.update({
+      where: { id: nextVehicleId },
+      data: { customerId: doc.customerId },
+    });
   });
 
   revalidatePath(`/documents/${documentId}/edit`);
@@ -688,6 +754,181 @@ export async function deleteDocument(id: string) {
   revalidatePath("/offers");
   revalidatePath("/credit-notes");
   revalidatePath("/stornos");
+}
+
+/**
+ * Angebot annehmen -> Auftrag + Arbeitskarte automatisch erstellen
+ */
+export async function acceptOfferAndCreateOrderAndWorkCard(offerId: string) {
+  const session = await getSessionFromCookies();
+  const offer = await prisma.document.findUnique({
+    where: { id: offerId },
+    include: {
+      lines: true,
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          companyName: true,
+          contactFirstName: true,
+          contactLastName: true,
+          isBusiness: true,
+        },
+      },
+      vehicle: {
+        select: {
+          id: true,
+          make: true,
+          model: true,
+          vin: true,
+        },
+      },
+    },
+  });
+
+  if (!offer) throw new Error("Angebot nicht gefunden");
+  if (offer.docType !== "OFFER") throw new Error("Nur Angebote können angenommen werden.");
+  if (!offer.isFinal) throw new Error("Nur finale Angebote können angenommen werden.");
+  if (offer.status === DocumentStatus.CONVERTED) {
+    throw new Error("Angebot wurde bereits angenommen.");
+  }
+
+  const year = new Date().getFullYear();
+
+  const result = await prisma.$transaction(async (tx) => {
+    const existingOrder = await tx.document.findFirst({
+      where: {
+        docType: "PURCHASE_CONTRACT",
+        sourceOfferId: offer.id,
+      },
+      select: { id: true },
+    });
+    if (existingOrder) {
+      throw new Error("Angebot wurde bereits angenommen.");
+    }
+
+    const orderDraftCounter = await tx.documentDraftCounter.upsert({
+      where: { docType_year: { docType: "PURCHASE_CONTRACT", year } },
+      update: { lastSeq: { increment: 1 } },
+      create: { docType: "PURCHASE_CONTRACT", year, lastSeq: 1 },
+      select: { lastSeq: true },
+    });
+    const orderDraftNumber = `DR-${orderDraftCounter.lastSeq}`;
+
+    const orderIssueDate = new Date();
+    const orderDeliveryDate = new Date(orderIssueDate);
+    orderDeliveryDate.setDate(orderDeliveryDate.getDate() + 7);
+
+    const order = await tx.document.create({
+      data: {
+        docType: "PURCHASE_CONTRACT",
+        docNumber: orderDraftNumber,
+        draftNumber: orderDraftNumber,
+        status: DocumentStatus.DRAFT,
+        isFinal: false,
+        issueDate: orderIssueDate,
+        deliveryDate: orderDeliveryDate,
+        customerId: offer.customerId,
+        vehicleId: offer.vehicleId,
+        ...getDocumentVehicleSnapshotData(offer),
+        sourceOfferId: offer.id,
+      },
+      select: { id: true },
+    });
+
+    let position = 1;
+    for (const source of offer.lines ?? []) {
+      const qty = Number(source.qty ?? 0);
+      if (!qty) continue;
+      const unitNetCents = Number(source.unitNetCents ?? 0);
+      const vatRate = normalizeVatRate(source.vatRate ?? 19);
+      const discountPct = Number(source.discountPct ?? 0);
+      const isMarginScheme = !!source.isMarginScheme;
+
+      const { net, vat, gross } = calcLineCents({
+        qty,
+        unitNetCents,
+        vatRate,
+        discountPct,
+      });
+
+      await tx.documentLine.create({
+        data: {
+          documentId: order.id,
+          position,
+          title: source.title,
+          description: source.description ?? null,
+          qty,
+          unitNetCents,
+          vatRate,
+          isMarginScheme,
+          discountPct,
+          lineNetCents: net,
+          lineVatCents: vat,
+          lineGrossCents: gross,
+        },
+      });
+      position += 1;
+    }
+    await recalcDocumentTotalsTx(tx, order.id);
+
+    const orderFinalCounter = await tx.documentCounter.upsert({
+      where: { docType_year: { docType: "PURCHASE_CONTRACT", year } },
+      update: { lastSeq: { increment: 1 } },
+      create: { docType: "PURCHASE_CONTRACT", year, lastSeq: 1 },
+      select: { lastSeq: true },
+    });
+    const orderNumber = formatDocNumber("PURCHASE_CONTRACT", year, orderFinalCounter.lastSeq);
+
+    await tx.document.update({
+      where: { id: order.id },
+      data: {
+        docNumber: orderNumber,
+        isFinal: true,
+        status: DocumentStatus.SENT,
+      },
+    });
+
+    const customerName = getCustomerDisplayName(offer.customer);
+    const vehicleMake = offer.vehicle?.make ?? offer.vehicleMake ?? null;
+    const vehicleModel = offer.vehicle?.model ?? offer.vehicleModel ?? null;
+    const licensePlate = offer.vehicle?.vin ?? offer.vehicleVin ?? null;
+
+    const workCard = await tx.employeeWorkCard.create({
+      data: {
+        customerId: offer.customerId,
+        vehicleId: offer.vehicleId,
+        customerName,
+        vehicleMake,
+        vehicleModel,
+        licensePlate,
+        notes: `Automatisch erstellt aus Angebot ${offer.docNumber}`,
+        workDate: new Date(),
+        createdByUserId: session?.userId ?? null,
+        createdByEmail: session?.username ?? session?.email ?? null,
+        sourceOfferId: offer.id,
+        sourceOrderId: order.id,
+        status: "OPEN",
+      },
+      select: { id: true },
+    });
+
+    await tx.document.update({
+      where: { id: offer.id },
+      data: { status: DocumentStatus.CONVERTED },
+    });
+
+    return { orderId: order.id, workCardId: workCard.id };
+  });
+
+  revalidatePath("/offers");
+  revalidatePath("/orders");
+  revalidatePath("/employees");
+  revalidatePath("/dashboard");
+  revalidatePath(`/documents/${offerId}/edit`);
+  revalidatePath(`/documents/${result.orderId}/edit`);
+
+  return result;
 }
 
 /**

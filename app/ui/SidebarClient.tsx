@@ -197,8 +197,15 @@ function formatDuration(ms: number) {
   };
 }
 
-export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
+export default function SidebarClient({
+  counts,
+  role = "OWNER",
+}: {
+  counts: SidebarCounts;
+  role?: "OWNER" | "MEMBER";
+}) {
   const pathname = usePathname();
+  const isMember = role === "MEMBER";
   const [now, setNow] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -210,6 +217,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const [vehiclesSalesOpen, setVehiclesSalesOpen] = useState(false);
 
+  const homeHref = isMember ? "/employees?module=cards&view=employee" : "/dashboard";
   const vehiclesSalesTotal = counts.vehiclesForSale + counts.vehiclesArchive;
 
   useEffect(() => {
@@ -234,7 +242,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
     <>
       <div className="border-b border-slate-700/60 p-4">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard" className="inline-flex items-center">
+          <Link href={homeHref} className="inline-flex items-center">
             <img src="/detailix-wordmark.svg" alt="Autosello" className="h-6 w-auto" />
           </Link>
           <button
@@ -313,121 +321,128 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 text-slate-200">
-        <div className="flex flex-col gap-1 pb-4">
-          <Link href="/dashboard" className="rounded px-3 py-2 text-sm hover:bg-slate-700/60">
-            Dashboard
-          </Link>
+        {isMember ? (
+          <div className="flex flex-col gap-1 pb-4">
+            <MenuRow label="Arbeitskarten" icon="users" href="/employees?module=cards&view=employee" />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1 pb-4">
+            <Link href={homeHref} className="rounded px-3 py-2 text-sm hover:bg-slate-700/60">
+              Dashboard
+            </Link>
 
-          <div className="mt-1 border-t border-slate-700/60 pt-2" />
+            <div className="mt-1 border-t border-slate-700/60 pt-2" />
 
-          <MenuRow label="Kunden anlegen" icon="users" href="/customers" count={counts.customers} />
-          <MenuRow
-            label="Angebot erstellen"
-            icon="tag"
-            href="/offers"
-            count={counts.offers}
-          />
-          <MenuRow label="Auftrag erstellen" icon="bolt" href="/orders" count={counts.orders} />
-          <MenuRow label="Termin erstellen" icon="calendar" placeholder />
-          <MenuRow
-            label="Rechnungen"
-            icon="receipt"
-            count={counts.invoices}
-            onToggle={() => setInvoicesOpen((v) => !v)}
-            isOpen={invoicesOpen}
-          />
-          {invoicesOpen && (
-            <div className="space-y-1">
-              <MenuRow
-                label="Rechnungen"
-                icon="receipt"
-                href="/invoices"
-                count={counts.invoices}
-                className="pl-8 text-xs"
-              />
-              <MenuRow
-                label="Gutschriften"
-                icon="receipt"
-                href="/credit-notes"
-                count={counts.creditNotes}
-                className="pl-8 text-xs"
-              />
-              <MenuRow
-                label="Stornos"
-                icon="receipt"
-                href="/stornos"
-                count={counts.stornos}
-                className="pl-8 text-xs"
-              />
-            </div>
-          )}
-          <MenuRow label="Leistungen" icon="tool" href="/services" count={counts.services} />
+            <MenuRow label="Kunden anlegen" icon="users" href="/customers" count={counts.customers} />
+            <MenuRow
+              label="Angebot erstellen"
+              icon="tag"
+              href="/offers"
+              count={counts.offers}
+            />
+            <MenuRow label="Auftrag erstellen" icon="bolt" href="/orders" count={counts.orders} />
+            <MenuRow label="Arbeitskarten" icon="users" href="/employees?module=cards&view=employer" />
+            <MenuRow label="Termin erstellen" icon="calendar" placeholder />
+            <MenuRow
+              label="Rechnungen"
+              icon="receipt"
+              count={counts.invoices}
+              onToggle={() => setInvoicesOpen((v) => !v)}
+              isOpen={invoicesOpen}
+            />
+            {invoicesOpen && (
+              <div className="space-y-1">
+                <MenuRow
+                  label="Rechnungen"
+                  icon="receipt"
+                  href="/invoices"
+                  count={counts.invoices}
+                  className="pl-8 text-xs"
+                />
+                <MenuRow
+                  label="Gutschriften"
+                  icon="receipt"
+                  href="/credit-notes"
+                  count={counts.creditNotes}
+                  className="pl-8 text-xs"
+                />
+                <MenuRow
+                  label="Stornos"
+                  icon="receipt"
+                  href="/stornos"
+                  count={counts.stornos}
+                  className="pl-8 text-xs"
+                />
+              </div>
+            )}
+            <MenuRow label="Leistungen" icon="tool" href="/services" count={counts.services} />
+            <MenuRow label="Mitarbeiter" icon="users" href="/employees?module=staff&view=employer" />
 
-          <div className="mt-1 border-t border-slate-700/60 pt-2" />
+            <div className="mt-1 border-t border-slate-700/60 pt-2" />
 
-          <MenuRow
-            label="Coming Soon"
-            icon="chip"
-            onToggle={() => {
-              setComingSoonOpen((v) => {
-                const next = !v;
-                if (!next) setVehiclesSalesOpen(false);
-                return next;
-              });
-            }}
-            isOpen={comingSoonOpen}
-          />
-          {comingSoonOpen && (
-            <div className="space-y-1">
-              <MenuRow
-                label="E-Rechnung Mailbox"
-                icon="receipt"
-                placeholder
-                className="pl-8 text-xs"
-              />
-              <MenuRow
-                label="Fahrzeuge Kunden"
-                icon="car"
-                href="/vehicles"
-                count={counts.vehiclesCustomer}
-                className="pl-8 text-xs"
-              />
-              <MenuRow
-                label="Fahrzeug Verkauf"
-                icon="car"
-                count={vehiclesSalesTotal}
-                onToggle={() => setVehiclesSalesOpen((v) => !v)}
-                isOpen={vehiclesSalesOpen}
-                className="pl-8 text-xs"
-              />
-              {vehiclesSalesOpen && (
-                <div className="space-y-1">
-                  <MenuRow
-                    label="Fahrzeuge Verkauf"
-                    icon="car"
-                    href="/vehicles/for-sale"
-                    count={counts.vehiclesForSale}
-                    className="pl-12 text-xs"
-                  />
-                  <MenuRow
-                    label="Fahrzeuge Archiv"
-                    icon="car"
-                    href="/vehicles/archive"
-                    count={counts.vehiclesArchive}
-                    className="pl-12 text-xs"
-                  />
-                </div>
-              )}
-              <MenuRow label="Dellenkalkulation" icon="grid" placeholder className="pl-8 text-xs" />
-              <MenuRow label="Mitarbeiter" icon="users" placeholder className="pl-8 text-xs" />
-              <MenuRow label="Geraetemiete" icon="briefcase" placeholder className="pl-8 text-xs" />
-              <MenuRow label="APPs" icon="chip" placeholder className="pl-8 text-xs" />
-              <MenuRow label="Updates" icon="bell" placeholder className="pl-8 text-xs" />
-            </div>
-          )}
+            <MenuRow
+              label="Coming Soon"
+              icon="chip"
+              onToggle={() => {
+                setComingSoonOpen((v) => {
+                  const next = !v;
+                  if (!next) setVehiclesSalesOpen(false);
+                  return next;
+                });
+              }}
+              isOpen={comingSoonOpen}
+            />
+            {comingSoonOpen && (
+              <div className="space-y-1">
+                <MenuRow
+                  label="E-Rechnung Mailbox"
+                  icon="receipt"
+                  placeholder
+                  className="pl-8 text-xs"
+                />
+                <MenuRow
+                  label="Fahrzeuge Kunden"
+                  icon="car"
+                  href="/vehicles"
+                  count={counts.vehiclesCustomer}
+                  className="pl-8 text-xs"
+                />
+                <MenuRow
+                  label="Fahrzeug Verkauf"
+                  icon="car"
+                  count={vehiclesSalesTotal}
+                  onToggle={() => setVehiclesSalesOpen((v) => !v)}
+                  isOpen={vehiclesSalesOpen}
+                  className="pl-8 text-xs"
+                />
+                {vehiclesSalesOpen && (
+                  <div className="space-y-1">
+                    <MenuRow
+                      label="Fahrzeuge Verkauf"
+                      icon="car"
+                      href="/vehicles/for-sale"
+                      count={counts.vehiclesForSale}
+                      className="pl-12 text-xs"
+                    />
+                    <MenuRow
+                      label="Fahrzeuge Archiv"
+                      icon="car"
+                      href="/vehicles/archive"
+                      count={counts.vehiclesArchive}
+                      className="pl-12 text-xs"
+                    />
+                  </div>
+                )}
+                <MenuRow label="Dellenkalkulation" icon="grid" placeholder className="pl-8 text-xs" />
+                <MenuRow label="Gerätemiete" icon="briefcase" placeholder className="pl-8 text-xs" />
+                <MenuRow label="APPs" icon="chip" placeholder className="pl-8 text-xs" />
+                <MenuRow label="Updates" icon="bell" placeholder className="pl-8 text-xs" />
+              </div>
+            )}
 
-          <MenuRow label="Einstellungen" icon="gear" href="/settings" />
-        </div>
+            <MenuRow label="Einstellungen" icon="gear" href="/settings" />
+          </div>
+        )}
       </nav>
 
       <div className="shrink-0 border-t border-slate-700/60 px-4 py-4 text-xs text-slate-300">
@@ -446,7 +461,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
     <>
       <div className="sticky top-0 z-40 border-b border-slate-700/60 bg-slate-900/95 backdrop-blur lg:hidden">
         <div className="flex items-center justify-between px-3 py-2">
-          <Link href="/dashboard" className="inline-flex items-center">
+          <Link href={homeHref} className="inline-flex items-center">
             <img src="/detailix-wordmark.svg" alt="Autosello" className="h-6 w-auto" />
           </Link>
           <button
@@ -454,9 +469,9 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
             onClick={() => setMobileOpen((v) => !v)}
             className="rounded border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-100"
             aria-expanded={mobileOpen}
-            aria-label="Menue ein- oder ausklappen"
+            aria-label="Menü ein- oder ausklappen"
           >
-            {mobileOpen ? "Schliessen" : "Menue"}
+            {mobileOpen ? "Schließen" : "Menü"}
           </button>
         </div>
       </div>
@@ -464,7 +479,7 @@ export default function SidebarClient({ counts }: { counts: SidebarCounts }) {
       <div className={`fixed inset-0 z-50 lg:hidden ${mobileOpen ? "" : "pointer-events-none"}`}>
         <button
           type="button"
-          aria-label="Menue schliessen"
+          aria-label="Menü schließen"
           onClick={() => setMobileOpen(false)}
           className={`absolute inset-0 bg-slate-950/65 transition-opacity ${
             mobileOpen ? "opacity-100" : "opacity-0"

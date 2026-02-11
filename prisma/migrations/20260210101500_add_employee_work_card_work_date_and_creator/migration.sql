@@ -1,0 +1,4 @@
+-- NOTE:
+-- This migration is intentionally empty.
+-- The additional EmployeeWorkCard columns are ensured idempotently in lib/tenant-db.ts
+-- to avoid conflicts between Prisma migration state and runtime workspace-schema sync.

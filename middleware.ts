@@ -9,6 +9,7 @@ import { getPublicBaseUrl } from "@/lib/public-base-url";
 function isPublicPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
+    pathname === "/employee-login" ||
     pathname === "/register" ||
     pathname === "/forgot-password" ||
     pathname === "/reset-password" ||
@@ -36,13 +37,34 @@ function redirectToLogin(req: NextRequest) {
   return NextResponse.redirect(loginUrl);
 }
 
+function redirectToEmployees(req: NextRequest) {
+  return NextResponse.redirect(
+    new URL("/employees?module=cards&view=employee", getPublicBaseUrl(req))
+  );
+}
+
+function roleRedirectPath(role: "OWNER" | "MEMBER") {
+  return role === "MEMBER" ? "/employees?module=cards&view=employee" : "/dashboard";
+}
+
+function isMemberAllowedPath(pathname: string): boolean {
+  if (pathname === "/employees") return true;
+  if (pathname.startsWith("/employees/")) return true;
+  return false;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Public paths should bypass auth checks entirely (perf + fewer crypto ops).
-  // Keep /login and /register excluded here, because authenticated users
-  // should still be redirected to /dashboard.
-  if (pathname !== "/login" && pathname !== "/register" && isPublicPath(pathname)) {
+  // Keep login/register routes excluded here, because authenticated users
+  // should be redirected based on role.
+  if (
+    pathname !== "/login" &&
+    pathname !== "/employee-login" &&
+    pathname !== "/register" &&
+    isPublicPath(pathname)
+  ) {
     return NextResponse.next();
   }
 
@@ -51,15 +73,19 @@ export async function middleware(req: NextRequest) {
   const session = await verifyAuthSession(token);
   const authenticated = !!session && !!workspaceCookie && workspaceCookie === session.workspaceId;
 
-  if (pathname === "/login" || pathname === "/register") {
+  if (pathname === "/login" || pathname === "/employee-login" || pathname === "/register") {
     if (authenticated) {
-      return NextResponse.redirect(new URL("/dashboard", getPublicBaseUrl(req)));
+      return NextResponse.redirect(new URL(roleRedirectPath(session.role), getPublicBaseUrl(req)));
     }
     return NextResponse.next();
   }
 
   if (!authenticated) {
     return redirectToLogin(req);
+  }
+
+  if (session.role === "MEMBER" && !isMemberAllowedPath(pathname)) {
+    return redirectToEmployees(req);
   }
 
   return NextResponse.next();
