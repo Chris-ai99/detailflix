@@ -1,6 +1,7 @@
 package com.autobiz.crmdialer.data
 
 import android.content.Context
+import android.net.Uri
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.autobiz.crmdialer.BuildConfig
@@ -53,8 +54,25 @@ class AppSettingsStore(context: Context) {
 
   companion object {
     fun normalizeBaseUrl(raw: String): String {
-      val trimmed = raw.trim()
+      var trimmed = raw.trim()
       if (trimmed.isEmpty()) return ""
+
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        trimmed = "https://$trimmed"
+      }
+
+      if (trimmed.startsWith("http://")) {
+        val host = runCatching { Uri.parse(trimmed).host.orEmpty().lowercase() }
+          .getOrDefault("")
+        val isLocalHost =
+          host == "localhost" ||
+            host == "127.0.0.1" ||
+            host == "10.0.2.2"
+        if (!isLocalHost) {
+          trimmed = trimmed.replaceFirst("http://", "https://")
+        }
+      }
+
       return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
     }
 
