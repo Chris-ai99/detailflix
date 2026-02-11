@@ -77,6 +77,61 @@ function sanitizeNote(value: string | null): string | null {
   return note.length > 240 ? `${note.slice(0, 237)}...` : note;
 }
 
+function splitPhoneCandidates(rawPhone: string | null): string[] {
+  const source = String(rawPhone ?? "").trim();
+  if (!source) return [];
+
+  const chunks = source
+    .replace(/[\r\n]+/g, ";")
+    .split(/[;,|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const all = new Set<string>([source, ...chunks]);
+  return Array.from(all);
+}
+
+function fuzzyDigitsMatch(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length < 7 && right.length < 7) return false;
+  return left.endsWith(right) || right.endsWith(left);
+}
+
+function customerPhoneMatches(
+  customerPhoneRaw: string | null,
+  normalizedE164: string,
+  defaultCountryCode: string
+): boolean {
+  const targetDigits = digitsOnly(normalizedE164);
+  if (!targetDigits) return false;
+
+  for (const candidate of splitPhoneCandidates(customerPhoneRaw)) {
+    const normalizedCandidate = normalizePhoneBestEffort(candidate, defaultCountryCode);
+    if (normalizedCandidate === normalizedE164) return true;
+
+    const candidateDigits = digitsOnly(candidate);
+    if (candidateDigits && fuzzyDigitsMatch(targetDigits, candidateDigits)) return true;
+
+    const normalizedCandidateDigits = digitsOnly(normalizedCandidate ?? "");
+    if (normalizedCandidateDigits && fuzzyDigitsMatch(targetDigits, normalizedCandidateDigits)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function findMatchingCustomer(
+  candidates: CustomerLookupRecord[],
+  normalizedE164: string,
+  defaultCountryCode: string
+): CustomerLookupRecord | undefined {
+  return candidates.find((customer) =>
+    customerPhoneMatches(customer.phone, normalizedE164, defaultCountryCode)
+  );
+}
+
 export async function GET(req: NextRequest) {
   const token = extractBearerToken(req.headers.get("authorization"));
   if (!token) {
@@ -103,7 +158,7 @@ export async function GET(req: NextRequest) {
   const digits = digitsOnly(normalizedE164);
   const tail = digits.slice(-7);
 
-  const candidates = await prisma.customer.findMany({
+  const indexedCandidates = await prisma.customer.findMany({
     where: {
       phone: tail ? { contains: tail } : { not: null },
     },
@@ -117,12 +172,35 @@ export async function GET(req: NextRequest) {
       notes: true,
       phone: true,
     },
-    take: 300,
+    orderBy: {
+      updatedAt: "desc",
+    },
+    take: 500,
   });
 
-  const match = candidates.find((customer) => {
-    return normalizePhoneBestEffort(customer.phone, defaultCountryCode) === normalizedE164;
-  });
+  let match = findMatchingCustomer(indexedCandidates, normalizedE164, defaultCountryCode);
+  if (!match) {
+    const fallbackCandidates = await prisma.customer.findMany({
+      where: {
+        phone: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        companyName: true,
+        contactFirstName: true,
+        contactLastName: true,
+        isBusiness: true,
+        notes: true,
+        phone: true,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+      take: 2000,
+    });
+    match = findMatchingCustomer(fallbackCandidates, normalizedE164, defaultCountryCode);
+  }
 
   if (!match) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
